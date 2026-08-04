@@ -5,27 +5,27 @@ import ResTool from "@/socket/resTool";
 import u from "@/utils";
 
 const deriveAssetSchema = z.object({
-  id: z.number().describe("衍生资产ID,如果新增则为空"),
-  assetsId: z.number().describe("关联的资产ID"),
-  prompt: z.string().describe("生成提示词"),
-  name: z.string().describe("衍生资产名称"),
-  desc: z.string().describe("衍生资产描述"),
-  src: z.string().nullable().describe("衍生资产资源路径"),
-  state: z.enum(["未生成", "生成中", "已完成", "生成失败"]).describe("衍生资产生成状态"),
-  type: z.enum(["role", "tool", "scene", "clip"]).describe("衍生资产类型"),
+  id: z.number().describe("ID tài sản phái sinh, để trống nếu thêm mới"),
+  assetsId: z.number().describe("ID tài sản liên kết"),
+  prompt: z.string().describe("Prompt tạo"),
+  name: z.string().describe("Tên tài sản phái sinh"),
+  desc: z.string().describe("Mô tả tài sản phái sinh"),
+  src: z.string().nullable().describe("Đường dẫn tài nguyên tài sản phái sinh"),
+  state: z.enum(["未生成", "生成中", "已完成", "生成失败"]).describe("Trạng thái tạo tài sản phái sinh"),
+  type: z.enum(["role", "tool", "scene", "clip"]).describe("Loại tài sản phái sinh"),
 });
 export const assetItemSchema = z.object({
-  id: z.number().describe("资产唯一标识"),
-  name: z.string().describe("资产名称"),
-  type: z.enum(["role", "tool", "scene", "clip"]).describe("资产类型"),
-  prompt: z.string().describe("生成提示词"),
-  desc: z.string().describe("资产描述"),
-  derive: z.array(deriveAssetSchema).describe("衍生资产列表"),
+  id: z.number().describe("ID duy nhất tài sản"),
+  name: z.string().describe("Tên tài sản"),
+  type: z.enum(["role", "tool", "scene", "clip"]).describe("Loại tài sản"),
+  prompt: z.string().describe("Prompt tạo"),
+  desc: z.string().describe("Mô tả tài sản"),
+  derive: z.array(deriveAssetSchema).describe("Danh sách tài sản phái sinh"),
 });
 const storyboardSchema = z.object({
   id: z.number().describe("分镜ID，必须为真实id"),
   duration: z.number().describe("持续时长(秒)"),
-  prompt: z.string().describe("生成提示词"),
+  prompt: z.string().describe("Prompt tạo"),
   associateAssetsIds: z.array(z.number()).describe("关联资产ID列表"),
   src: z.string().nullable().describe("分镜资源路径"),
   index: z.number().nullable().optional().describe("分镜排序字段"),
@@ -46,7 +46,7 @@ export const flowDataSchema = z.object({
   script: z.string().describe("剧本内容"),
   scriptPlan: z.string().describe("拍摄计划"),
   assets: z.array(assetItemSchema).describe("衍生资产"),
-  storyboardTable: z.string().describe("分镜表"),
+  storyboardTable: z.string().describe("Bảng phân cảnh"),
   storyboard: z.array(storyboardSchema).describe("分镜面板"),
 });
 
@@ -87,7 +87,7 @@ export default (toolCpnfig: ToolConfig) => {
   const workMap: Record<any, any> = {};
   const tools: Record<string, Tool> = {
     get_flowData: tool({
-      description: "获取工作区数据",
+      description: "Lấy dữ liệu workspace",
       inputSchema: jsonSchema<{ key: keyof FlowData }>(
         z
           .object({
@@ -111,14 +111,14 @@ export default (toolCpnfig: ToolConfig) => {
       },
     }),
     add_deriveAsset: tool({
-      description: "新增或更新衍生资产",
+      description: "Thêm mới hoặc cập nhật tài sản phái sinh",
       inputSchema: jsonSchema<{ assetsId: number; id: number | null; name: string; desc: string }>(
         z
           .object({
-            assetsId: z.number().describe("关联的资产ID"),
-            id: z.number().nullable().describe("衍生资产ID,如果新增则为空"),
-            name: z.string().describe("衍生资产名称"),
-            desc: z.string().describe("衍生资产描述"),
+            assetsId: z.number().describe("ID tài sản liên kết"),
+            id: z.number().nullable().describe("ID tài sản phái sinh, để trống nếu thêm mới"),
+            name: z.string().describe("Tên tài sản phái sinh"),
+            desc: z.string().describe("Mô tả tài sản phái sinh"),
           })
           .toJSONSchema(),
       ),
@@ -128,7 +128,7 @@ export default (toolCpnfig: ToolConfig) => {
         const normalizedId = idRaw === "null" || idRaw === "" || idRaw === undefined ? null : (idRaw as number | null);
         const deriveAsset = { ...raw, id: normalizedId };
 
-        const thinking = msg.thinking("正在操作资产...");
+        const thinking = msg.thinking("Đang thao tác tài sản...");
         const { projectId, scriptId } = resTool.data;
         const startTime = Date.now();
         const parentAssets = await u.db("o_assets").where("id", deriveAsset.assetsId).select("id", "type").first();
@@ -150,38 +150,38 @@ export default (toolCpnfig: ToolConfig) => {
           const [insertedId] = await u.db("o_assets").insert(data);
           data.id = insertedId;
           await u.db("o_scriptAssets").insert({ scriptId, assetId: insertedId });
-          thinking.appendText(`已新增衍生资产，ID: ${insertedId}\n`);
+          thinking.appendText(`Đã thêm tài sản phái sinh, ID: ${insertedId}\n`);
         }
         const res = await new Promise((resolve) => socket.emit("addDeriveAsset", data, (res: any) => resolve(res)));
-        thinking.updateTitle("资产操作完成");
+        thinking.updateTitle("Thao tác tài sản hoàn tất");
         thinking.complete();
         return res ?? "操作成功";
       },
     }),
     del_deriveAsset: tool({
-      description: "删除衍生资产",
+      description: "Xóa tài sản phái sinh",
       inputSchema: jsonSchema<{ assetsId: number; id: number }>(
         z
           .object({
-            assetsId: z.number().describe("关联的资产ID"),
+            assetsId: z.number().describe("ID tài sản liên kết"),
             id: z.number().describe("衍生资产ID"),
           })
           .toJSONSchema(),
       ),
       execute: async ({ assetsId, id }) => {
-        const thinking = msg.thinking("正在操作资产...");
+        const thinking = msg.thinking("Đang thao tác tài sản...");
         const { scriptId } = resTool.data;
         await u.db("o_assets").where("id", id).del();
         await u.db("o_scriptAssets").where({ scriptId, assetId: id }).del();
-        thinking.appendText(`已删除衍生资产，ID: ${id}\n`);
+        thinking.appendText(`Đã xóa tài sản phái sinh, ID: ${id}\n`);
         const res = await new Promise((resolve) => socket.emit("delDeriveAsset", { assetsId, id }, (res: any) => resolve(res)));
-        thinking.updateTitle("资产操作完成");
+        thinking.updateTitle("Thao tác tài sản hoàn tất");
         thinking.complete();
-        return res ?? "删除成功";
+        return res ?? "Đã xóa";
       },
     }),
     generate_deriveAsset: tool({
-      description: "生成衍生资产图片",
+      description: "Tạo ảnh tài sản phái sinh",
       inputSchema: jsonSchema<{ ids: number[] }>(
         z
           .object({
@@ -190,11 +190,11 @@ export default (toolCpnfig: ToolConfig) => {
           .toJSONSchema(),
       ),
       execute: async ({ ids }) => {
-        const thinking = msg.thinking("正在生成衍生资产...");
+        const thinking = msg.thinking("Đang tạo tài sản phái sinh...");
         new Promise((resolve) => socket.emit("generateDeriveAsset", { ids }, (res: any) => resolve(res)))
           .then((res) => {
             thinking.appendText(`已生成衍生资产，ID: ${JSON.stringify(res, null, 2)}\n`);
-            thinking.updateTitle("衍生资产开始完成");
+            thinking.updateTitle("Bắt đầu tạo tài sản phái sinh hoàn tất");
             thinking.complete();
           })
           .catch((e) => {
@@ -211,12 +211,12 @@ export default (toolCpnfig: ToolConfig) => {
       inputSchema: jsonSchema<{ ids: number[] }>(
         z
           .object({
-            ids: z.array(z.number()).describe("必须获取真实的分镜ID，支持批量生成"),
+            ids: z.array(z.number()).describe("Phải lấy ID phân cảnh thực tế, hỗ trợ tạo hàng loạt"),
           })
           .toJSONSchema(),
       ),
       execute: async ({ ids }) => {
-        const thinking = msg.thinking("正在生成分镜...");
+        const thinking = msg.thinking("Đang tạo phân cảnh...");
         socketQueue(
           () =>
             new Promise((resolve, reject) =>
@@ -228,7 +228,7 @@ export default (toolCpnfig: ToolConfig) => {
         )
           .then((res) => {
             thinking.appendText("生成的分镜数据:\n" + JSON.stringify(res, null, 2));
-            thinking.updateTitle("分镜生成完成");
+            thinking.updateTitle("Tạo phân cảnh hoàn tất");
             thinking.complete();
           })
           .catch((e) => {
@@ -241,7 +241,7 @@ export default (toolCpnfig: ToolConfig) => {
       },
     }),
     add_flowData_storyboard: tool({
-      description: "新增分镜面板到工作区",
+      description: "Thêm panel phân cảnh vào workspace",
       inputSchema: jsonSchema<{
         videoDesc: string;
         prompt: string | null;
@@ -252,17 +252,17 @@ export default (toolCpnfig: ToolConfig) => {
       }>(
         z
           .object({
-            videoDesc: z.string().describe("画面描述、场景、关联资产名称、时长、景别、运镜、角色动作、情绪、光影氛围、台词、音效、关联资产ID"),
-            prompt: z.string().nullable().describe("分镜图片提示词"),
-            track: z.string().describe("分组"),
-            duration: z.number().describe("视频推荐时间"),
-            associateAssetsIds: z.array(z.number()).nullable().describe("该分镜所需的资产ID列表"),
-            shouldGenerateImage: z.enum(["true", "false"]).describe("是否需要生成分镜图片"),
+            videoDesc: z.string().describe("Mô tả画面, bối cảnh, tên tài sản liên kết, thời lượng, cỡ cảnh, vận camera, hành động nhân vật, cảm xúc, ánh sáng, thoại, âm hiệu, ID tài sản liên kết"),
+            prompt: z.string().nullable().describe("Prompt ảnh phân cảnh"),
+            track: z.string().describe("Nhóm"),
+            duration: z.number().describe("Thời lượng video đề xuất"),
+            associateAssetsIds: z.array(z.number()).nullable().describe("Danh sách ID tài sản cho phân cảnh này"),
+            shouldGenerateImage: z.enum(["true", "false"]).describe("Có cần tạo ảnh phân cảnh không"),
           })
           .toJSONSchema(),
       ),
       execute: async (raw) => {
-        const thinking = msg.thinking("正在新增 分镜面板 数据...");
+        const thinking = msg.thinking("Đang thêm dữ liệu panel phân cảnh...");
         const data = {
           videoDesc: raw.videoDesc,
           prompt: raw.prompt,
@@ -281,13 +281,13 @@ export default (toolCpnfig: ToolConfig) => {
             ),
         )
           .then((res) => {
-            thinking.appendText("新增的分镜数据:\n" + JSON.stringify(data, null, 2));
-            thinking.updateTitle("新增分镜成功");
+            thinking.appendText("Dữ liệu phân cảnh đã thêm:\n" + JSON.stringify(data, null, 2));
+            thinking.updateTitle("Thêm phân cảnh thành công");
             thinking.complete();
           })
           .catch((e) => {
-            thinking.appendText("新增的分镜数据:\n" + JSON.stringify(data, null, 2));
-            thinking.updateTitle("新增分镜失败");
+            thinking.appendText("Dữ liệu phân cảnh đã thêm:\n" + JSON.stringify(data, null, 2));
+            thinking.updateTitle("Thêm phân cảnh thất bại");
             thinking.complete();
           });
         return true;

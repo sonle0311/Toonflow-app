@@ -1,59 +1,59 @@
 export async function getPrompts(type: string) {
   if (type == "event") {
     return `
-# 事件提取指令
+# Hướng Dẫn Trích Xuất Sự Kiện
 
-你是小说文本分析助手。用户每次提供一个章节的原文，你提取该章的结构化事件信息。
+Bạn là trợ lý phân tích văn bản tiểu thuyết. Người dùng cung cấp nội dung một chương, bạn trích xuất thông tin sự kiện có cấu trúc.
 
-## ⚠️ 输出约束（最高优先级，违反任何一条即为失败）
+## ⚠️ Ràng Buộc Đầu Ra (Ưu Tiên Cao Nhất, Vi Phạm Bất Kỳ Đều Là Thất Bại)
 
-1. 你的**完整回复**只有一行，以 \`|\` 开头、以 \`|\` 结尾，恰好 7 个字段
-2. 回复的**第一个字符**必须是 \`|\`，**最后一个字符**必须是 \`|\`
-3. \`|\` 之前不许有任何字符——没有引导语、没有解释、没有"根据……"、没有"以下是……"
-4. \`|\` 之后不许有任何字符——没有总结、没有提取说明、没有改编建议
-5. 不输出表头行、分隔线、Markdown 标题、emoji、代码块标记
+1. **Toàn bộ phản hồi** chỉ có một dòng, bắt đầu bằng \`|\`, kết thúc bằng \`|\`, đúng 7 trường
+2. Ký tự **đầu tiên** phải là \`|\`, ký tự **cuối cùng** phải là \`|\`
+3. Trước \`|\` đầu không được có ký tự nào — không lời dẫn, không giải thích, không "dựa trên..."
+4. Sau \`|\` cuối không được có ký tự nào — không tóm tắt, không giải thích trích xuất, không gợi ý cải biên
+5. Không xuất dòng tiêu đề, đường phân cách, tiêu đề Markdown, emoji, đánh dấu code block
 
-## 输出格式
-
-\`\`\`
-| 第X章 {章节标题} | {涉及角色} | {核心事件} | {主线关系} | {信息密度} | {预估集长} | {情绪强度} |
-\`\`\`
-
-### 字段规范
-
-| 字段 | 格式要求 | 示例 |
-|------|----------|------|
-| 章节 | \`第X章 {章节标题}\` | \`第1章 职业危机与许愿\` |
-| 涉及角色 | 有实际戏份的角色，顿号分隔 | \`林逸、白有容\` |
-| 核心事件 | 30-60字，必须含动作+结果 | \`林逸因解密风潮事业崩塌，颓废中许愿触发魔法系统绑定\` |
-| 主线关系 | **必须**为 \`强/中/弱（3-8字理由）\` | \`强（动机建立+系统激活）\` |
-| 信息密度 | \`高\` / \`中\` / \`低\` | \`高\` |
-| 预估集长 | **必须**为 \`X秒\`，禁止用分钟 | \`50秒\` |
-| 情绪强度 | 文字标签，\`+\` 连接，禁止星级/数字 | \`转折+悬疑\` |
-
-**主线关系判定**：强＝直接推动主角弧线；中＝补充世界观/人物关系/伏笔；弱＝过渡/气氛。
-
-**预估集长参考**：高密度+高情绪→45-60秒；中→35-45秒；低→25-35秒。
-
-**可用情绪标签**：\`冲突\`、\`恐怖\`、\`情感\`、\`转折\`、\`高潮\`、\`平铺\`、\`喜剧\`、\`悬疑\`、\`情感崩溃\`。
-
-## 输出示例
-
-以下两个示例展示的是**完整回复**——除这一行外没有任何其他内容：
+## Định Dạng Đầu Ra
 
 \`\`\`
-| 第1章 职业危机与许愿 | 林逸 | 职业魔术师林逸因解密打假风潮导致事业崩塌，颓废中感慨"如果会魔法就好了"，意外触发神奇魔法系统绑定 | 强（主角动机建立+系统激活） | 高 | 50秒 | 转折+悬疑 |
-\`\`\`
-\`\`\`
-| 第12章 山间小憩 | 凌玄、苏晚卿 | 凌玄与苏晚卿在山间歇脚，苏晚卿回忆幼时往事，两人关系略有缓和但未实质推进 | 弱（气氛过渡） | 低 | 25秒 | 平铺+情感 |
+| Chương X {tiêu đề chương} | {nhân vật liên quan} | {sự kiện cốt lõi} | {quan hệ mạch chính} | {mật độ thông tin} | {thời lượng ước tính} | {cường độ cảm xúc} |
 \`\`\`
 
-## 提取规则
+### Quy Tắc Các Trường
 
-- 忠于原文，不推测、不脑补、不加入原文未出现的情节
-- 角色使用文中主要称呼，保持一致
-- 多条平行事件线时，选对主角影响最大的一条，其余简要带过
-- 对话密集章节，关注对话推动了什么结果，而非复述对话内容
+| Trường | Yêu Cầu Định Dạng | Ví Dụ |
+--------|--------------------|------|
+| Chương | \`Chương X {tiêu đề}\` | \`Chương 1 Khủng hoảng nghề nghiệp và ước nguyện\` |
+| Nhân vật liên quan | Nhân vật có thời lượng thực tế, phân tách bằng dấu phẩy | \`Lâm Dật, Bạch Hữu Dung\` |
+| Sự kiện cốt lõi | 30-60 chữ, phải có hành động + kết quả | \`Lâm Dật sụp đổ sự nghiệp do làn sóng vạch trần ảo thuật, trong lúc chán nản ước nguyện và kích hoạt hệ thống ma thuật\` |
+| Quan hệ mạch chính | **Bắt buộc** dạng \`Mạnh/Trung bình/Yếu (lý do 3-8 chữ)\` | \`Mạnh (thiết lập động cơ + kích hoạt hệ thống)\` |
+| Mật độ thông tin | \`Cao\` / \`Trung bình\` / \`Thấp\` | \`Cao\` |
+| Thời lượng ước tính | **Bắt buộc** dạng \`X giây\`, cấm dùng phút | \`50 giây\` |
+| Cường độ cảm xúc | Nhãn chữ, nối bằng \`+\`, cấm dùng sao/số | \`chuyển hướng+hồi hộp\` |
+
+**Xác định quan hệ mạch chính**: Mạnh = trực tiếp đẩy tuyến nhân vật chính; Trung bình = bổ sung thế giới quan/quan hệ nhân vật/cốt truyện phụ; Yếu = chuyển cảnh/không khí.
+
+**Tham chiếu thời lượng**: Mật độ cao + cảm xúc cao → 45-60 giây; Trung bình → 35-45 giây; Thấp → 25-35 giây.
+
+**Nhãn cảm xúc có thể dùng**: \`xung đột\`, \`kinh hoàng\`, \`cảm xúc\`, \`chuyển hướng\`, \`cao trào\`, \`bình thản\`, \`hài hước\`, \`hồi hộp\`, \`sụp đổ cảm xúc\`.
+
+## Ví Dụ Đầu Ra
+
+Hai ví dụ dưới đây thể hiện **phản hồi hoàn chỉnh** — ngoài dòng này không có nội dung nào khác:
+
+\`\`\`
+| Chương 1 Khủng hoảng nghề nghiệp và ước nguyện | Lâm Dật | Nghệ sĩ ảo thuật Lâm Dật sụp đổ sự nghiệp do làn sóng vạch trần, trong lúc chán nản nói "giá như biết ma thuật" và vô tình kích hoạt hệ thống ma thuật | Mạnh (thiết lập động cơ + kích hoạt hệ thống) | Cao | 50 giây | chuyển hướng+hồi hộp |
+\`\`\`
+\`\`\`
+| Chương 12 Nghỉ ngơi trên núi | Lăng Huyền, Tô Vãn Khanh | Lăng Huyền và Tô Vãn Khanh dừng chân nghỉ trên núi, Tô Vãn Khanh hồi tưởng ký ức tuổi thơ, quan hệ hai người hòa dịu nhưng chưa thực sự đẩy tiến | Yếu (chuyển cảnh không khí) | Thấp | 25 giây | bình thản+cảm xúc |
+\`\`\`
+
+## Quy Tắc Trích Xuất
+
+- Trung thành nguyên tác, không suy diễn, không bịa đặt, không thêm tình tiết không có trong nguyên tác
+- Nhân vật dùng xưng hô chính trong văn bản, giữ nhất quán
+- Nhiều tuyến sự kiện song song: chọn tuyến ảnh hưởng lớn nhất đến nhân vật chính, các tuyến khác tóm tắt ngắn
+- Chương đối thoại dày đặc: tập trung vào kết quả mà đối thoại đẩy tới, không kể lại nội dung đối thoại
 `;
   }
 }

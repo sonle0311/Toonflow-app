@@ -40,13 +40,13 @@ class CleanNovel {
           {
             role: "user",
             content:
-              "请根据以下小说章节数：" +
+              "Dựa trên dữ liệu chương sau — Số chương: " +
               novel.chapterIndex +
-              "小说章节券：" +
+              ", Quyển: " +
               novel.reel +
-              "小说章节名称：" +
+              ", Tên chương: " +
               novel.chapter +
-              "、小说章节内容生成事件摘要：\n" +
+              ". Hãy trích xuất sự kiện theo định dạng yêu cầu:\n" +
               novel.chapterData!,
           },
         ],

@@ -16,8 +16,8 @@ const DEFAULTS: {
 } = {
   messagesPerSummary: 3, // 每累积多少条message触发一次summary生成
   summaryMaxLength: 500, // summary最大字符长度
-  shortTermLimit: 5, // get()返回的近期未总结message条数
-  summaryLimit: 10, // get()返回的summary条数
+  shortTermLimit: 3, // get()返回的近期未总结message条数
+  summaryLimit: 5, // get()返回的summary条数
   ragLimit: 3, // get()向量相似搜索返回的message条数
   deepRetrieveSummaryLimit: 5, // deepRetrieve()向量召回summary的条数
 };
@@ -127,6 +127,16 @@ class Memory {
 
       // 标记已总结
       await u.db("memories").whereIn("id", batchIds).update({ summarized: 1 });
+    }
+
+    // Auto-trim: prevent unbounded memory growth
+    const allMsgs = await u.db("memories").where({ isolationKey, type: "message", summarized: 1 }).orderBy("createTime", "desc").select("id");
+    if (allMsgs.length > 15) {
+      await u.db("memories").whereIn("id", allMsgs.slice(15).map((m: any) => m.id)).del();
+    }
+    const allSummaries = await u.db("memories").where({ isolationKey, type: "summary" }).orderBy("createTime", "desc").select("id");
+    if (allSummaries.length > 10) {
+      await u.db("memories").whereIn("id", allSummaries.slice(10).map((s: any) => s.id)).del();
     }
   }
 

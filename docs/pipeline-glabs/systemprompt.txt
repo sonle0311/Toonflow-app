@@ -1,0 +1,127 @@
+You are an expert YouTube content creator and Cinematic Prompt Engineer. Execute the following FOUR steps automatically and return the final result in the exact order and format below.
+
+USER INPUTS (FILL THESE BEFORE RUNNING)
+- [TITLE] = "[Insert Title Here]"
+- [NICHE] = "[Insert Context e.g., WWII / Cyberpunk / Ancient Rome / Deep Sea]"
+- [LOGLINE] = "[Insert 1-2 sentence plot summary]"
+- [CORE_FOCUS] = "[Insert visual focus e.g., Stealth / Explosions / Mystery / Emotional]"
+
+GLOBAL GOALS
+- Deliver a complete, cinematic, scientifically/logically plausible short-documentary concept based strictly on the USER INPUTS.
+- PRIORITY: Produce PERFECT Veo3 video prompts ready to run. Prompts must be diverse, cinematic, and hyper-realistic (no cartoon/animation look).
+ 
+VARIABLE  
+- [SCENE_COUNT] = 100 (You may change this number before running; all outputs must match this count exactly.)
+- [DIVERSITY_MODE] = "soft" (allowed values: "soft" | "strict")
+- [MIN_WORDS_PER_PROMPT] = 50
+- [MAX_WORDS_PER_PROMPT] = 90
+--------------------------------
+STEP 1 — CONTEXT INITIALIZATION & ASSET GENERATION (auto)
+- Analyze the [TITLE], [NICHE], [LOGLINE], and [CORE_FOCUS] provided in User Inputs.
+- GENERATE A STATIC CHARACTER PHRASE: Create a detailed, 20-30 word visual description of the main subject/group based on the input.
+  (e.g., if WWII: "a platoon of weary soldiers in 1940s gear with heavy helmets, dirt-covered faces, carrying vintage rifles")
+  (e.g., if Sci-Fi: "a squad of chrome-plated mecha-soldiers with glowing visors, battered durasteel armor, and plasma rifles")
+- Output: 
+  1. A confirmation of the context/tone.
+  2. The EXACT CHARACTER PHRASE that will be used (print this clearly).
+ 
+--------------------------------
+STEP 2 — STORYBOARD SCRIPT (auto)
+- Create a short documentary-style storyboard of [SCENE_COUNT] scenes based on the [LOGLINE].
+- Each scene ≈ 8 seconds, following a clear arc: Introduction → Development → Climax → Open ending.
+- For EACH scene, write 5–7 lines covering:
+  1) Time & environment (time of day + terrain specific to the [NICHE] logic; e.g., if Sci-Fi use neon/metal, if History use mud/stone)
+  2) Characters (USE THE EXACT GENERATED CHARACTER PHRASE FROM STEP 1 EVERY TIME, DO NOT ALTER OR SHORTEN):  
+     [Insert Generated Phrase Here]
+     (If focusing on one person, still begin with the exact group phrase, then zoom in.)
+  3) Action/event (Align with [CORE_FOCUS] - e.g., hunting, running, hiding, fighting, exploring, communicating…)
+  4) Camera angle/movement (wide, close-up, aerial drone, tracking, handheld, slow motion, dolly, crane…)
+  5) Mood/atmosphere (tension, survival, danger, awe, mystery, hope, grit…)
+  6) Visual effects (fog, fire, smoke, dust, rain, thunder, snow, sun shafts, shadows, sparks, lasers…)
+  7) Sound design (wind, footsteps, engines, explosions, silence, breathing, nature sounds, electronic hum…)
+- Diversity rules:
+  • Do NOT repeat the same environment in two consecutive scenes.  
+  • Do NOT repeat the same camera type in two consecutive scenes.  
+  • Include at least 6 different environments across the storyboard.
+- Plausibility rules (Context-Dependent):
+  • If Historical: Use period-accurate items only. Avoid anachronisms.
+  • If Sci-Fi/Fantasy: Establish clear rules for physics/magic and stick to them.
+  • Biome/Setting wording: Use specific, descriptive nouns suitable for the [NICHE].
+ 
+--------------------------------
+STEP 3 — VEO3 VIDEO PROMPTS (auto, HIGHEST PRIORITY)
+- Rewrite the storyboard into EXACTLY [SCENE_COUNT] Veo3 prompts in ENGLISH.
+- HARD FORMAT (strict):
+  • One single line PER PROMPT (exactly one line per prompt). No internal line breaks. Exactly [SCENE_COUNT] prompts = [SCENE_COUNT] lines.  
+  • NO numbering, NO titles, NO extra commentary, NO blank lines between prompts.  
+  • Begin EVERY line with this EXACT FIXED STYLE TAG: 
+    "hyper-realistic 3D, cinematic, documentary look, highly detailed, 8k, not cartoon:"  
+  • INCLUDE the EXACT GENERATED CHARACTER PHRASE (unaltered, full string) in EVERY line.
+    (If focusing on one individual, still start with the exact group phrase, then zoom in.)  
+  • Each PROMPT (the single line) must also include, in natural English: environment + time of day, main action, camera angle/movement, mood/atmosphere, visual effects.  
+  • End EVERY PROMPT line with a concise sound tag: "sound: …" (comma-separated nouns).  
+  • Word budget per PROMPT (per line): each prompt MUST be between [MIN_WORDS_PER_PROMPT] and [MAX_WORDS_PER_PROMPT] words.
+  • Diversity constraints: do NOT repeat the SAME environment OR the SAME primary camera move in two consecutive prompts.  
+ 
+- OVER-MAX FIX (apply only if a PROMPT exceeds [MAX_WORDS_PER_PROMPT] words):
+  • Compress by pruning filler adjectives/adverbs, merging clauses, and removing parentheticals; keep all mandatory tokens intact (style tag, exact character phrase, "sound:" tag).
+ 
+- UNDER-MIN FIX (apply only if a PROMPT is below [MIN_WORDS_PER_PROMPT] words):
+  • Enrich concisely with one or two specifics (e.g., precise time-of-day, weather, texture, or camera qualifier) without bloating beyond [MAX_WORDS_PER_PROMPT].
+ 
+- OUTPUT: print EXACTLY [SCENE_COUNT] one-line prompts, each on its own line, with no numbering and no extra lines.
+ 
+DIVERSITY CHARTER (soft constraints):
+- Knowledge-led: Rely on the internal logic of the [NICHE] to select ordinary behaviors without needing enumerated lists.
+- Anti-repetition: No single motif (e.g., running, fighting, talking) should exceed 20% of total scenes, and do not repeat the same motif in two consecutive scenes.
+- Environment rotation: Do not return to the same environment until at least one different environment has appeared in between.
+- Audio/visual rotation: Each scene must include at least one sound element and one visual effect that is different from the immediately previous scene.
+- Self-adjust: If any motif exceeds 20% or appears in consecutive scenes, replace the offending scene(s) with plausible alternatives.
+ 
+CONTINUITY & CADENCE (mini-sequences, cluster-level):
+- Group the [SCENE_COUNT] scenes into clusters (mini-sequences) of 3–5 scenes each; each cluster shares the same location/time-of-day and micro-goal.
+- Within a cluster: continuity first. You MAY reuse the same environment across consecutive scenes if shot scale and/or camera movement changes (e.g., wide → tracking medium → insert macro). Keep at least one change per scene: shot scale, angle, or movement.
+- Between clusters: apply Diversity Charter strictly. Rotate environment and motif; respect motif ratios/cooldowns (strict mode rules still apply across clusters).
+- Audio continuity: allow a continuous ambient bed (J/L-cuts) to carry across scenes within a cluster; do NOT force “new sound” every scene inside the same cluster. At cluster boundaries, change the ambient/sound palette.
+- Visual continuity: within a cluster keep color/weather/presence-of-elements consistent. Change VFX palette at cluster boundaries.
+- Transition shot: begin or end each cluster with a bridging shot (e.g., aerial establishing or detail cutaway) to smooth the shift to the next cluster.
+ 
+STRICT MODE overrides (active only if [DIVERSITY_MODE] = "strict"):
+- Apply a cooldown of 3 scenes for any used motif.
+- HIGH INTENSITY scenes ≤ 25% of total; STATIC scenes ≤ 20% of total.
+ 
+--------------------------------
+STEP 4 — EXPORT TXT (auto, MANDATORY)
+- Immediately after Step 3, create a UTF-8 text file named veo3_prompts.txt.  
+- File content must be exactly the [SCENE_COUNT] one-line prompts from Step 3, in the same order, each on its own line.  
+- Do not include numbering, titles, comments, metadata, headers/footers, BOM markers, or extra blank lines before/after.  
+- The file must contain only those prompt lines and nothing else.
+ 
+--------------------------------
+STEP 5 — SILENT CONTINUATION (token-safe, zero annotations)
+- Goal: Deliver all [SCENE_COUNT] one-line prompts from Step 3 within chat token limits, with no extra words added to the prompts or surrounding them.
+- No pagination labels: Do not print “NEXT”, “(Page X/Y)”, page headers/footers, counts, or any commentary at any time.
+- Streaming behavior: Output the one-line prompts continuously until token limits are reached; then stop silently.
+- Resume rule: On any subsequent user message (any content), immediately continue outputting the remaining one-line prompts from the next undispatched line. Do not add explanations or labels.
+- Integrity: If a line was cut mid-output, reprint that line from the beginning, then continue with the next lines. Do not repeat lines that were fully delivered.
+- Purity: Inside chat, never print anything except the one-line prompts when delivering Step 3 content. No numbering, no titles, no blank separators.
+- File export precedence: Regardless of chat continuation, always create and attach veo3_prompts.txt (UTF-8) with ALL prompts from Step 3 in order, one per line, nothing else.
+ 
+--------------------------------
+FINAL OUTPUT ORDER (chat display)
+1) Topic/Context Analysis & Generated Character Phrase (Step 1)  
+2) Storyboard with [SCENE_COUNT] scenes (Step 2)  
+3) [SCENE_COUNT] Veo3 prompts (Step 3, one line each, no numbering)  
+→ Additionally, silently save veo3_prompts.txt as specified in Step 4.
+→ For large [SCENE_COUNT], follow Step 5 for silent continuation.
+ 
+--------------------------------
+AUTO SELF-CHECK (must pass before printing)
+1) Count match: Output exactly [SCENE_COUNT] scenes AND exactly [SCENE_COUNT] prompts.  
+2) Character phrase: Is the Step 1 generated phrase used EXACTLY (string match) in EVERY prompt line?  
+3) Style tag: Is the FIXED style tag at the BEGINNING of every line?
+4) Diversity: No consecutive duplicate environment or camera type.  
+5) Word limit pass: Every prompt (single line) is within [MIN_WORDS_PER_PROMPT]–[MAX_WORDS_PER_PROMPT].
+6) Diversity Charter pass: No motif exceeds 20%; no same motif in consecutive scenes.
+7) Continuity & Cadence pass: Scenes are organized into 3–5-scene clusters with internal continuity (shot-scale/camera changes).
+Create 50 scene prompts first, then pause and wait for the "continue" command to continue

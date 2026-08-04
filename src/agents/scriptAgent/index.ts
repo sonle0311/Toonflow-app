@@ -7,6 +7,7 @@ import useTools from "@/agents/scriptAgent/tools";
 import ResTool from "@/socket/resTool";
 import * as fs from "fs";
 import path from "path";
+const LANG_SUFFIX = "\n\n[IMPORTANT: You must respond ENTIRELY in Vietnamese (Tiếng Việt). Không được sử dụng tiếng Trung. Tất cả output phải bằng tiếng Việt. This overrides any language in the context above.]"
 
 export interface AgentContext {
   socket: Socket;
@@ -66,7 +67,7 @@ export async function runDecisionAI(ctx: AgentContext) {
     messages: [
       { role: "system", content: prompt },
       { role: "assistant", content: projectInfo + "\n" + mem },
-      { role: "user", content: text },
+      { role: "user", content: text + LANG_SUFFIX },
     ],
     abortSignal,
     tools: {
@@ -113,7 +114,7 @@ function createSubAgent(parentCtx: AgentContext) {
     const subMsg = resTool.newMessage("assistant", name);
 
     const { fullStream } = await u.Ai.Text(key, parentCtx.thinkConfig.think, parentCtx.thinkConfig.thinlLevel).stream({
-      system,
+      system: system + LANG_SUFFIX,
       messages: messages ?? [{ role: "user", content: prompt }],
       abortSignal,
       tools: { ...extraTools, ...useTools({ resTool, msg: subMsg }) },

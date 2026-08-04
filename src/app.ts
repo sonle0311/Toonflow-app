@@ -47,7 +47,7 @@ export default async function startServe(randomPort: Boolean = false) {
   await checkPermissions();
 
   await u.writeVersion();
-  const io = new Server(server, { cors: { origin: "*" } });
+  const io = new Server(server, { cors: { origin: "*" }, pingTimeout: 120000, pingInterval: 10000 });
   socketInit(io);
 
   if (process.env.NODE_ENV == "dev") await buildRoute();
