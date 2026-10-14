@@ -110,7 +110,7 @@ async function fetchProviderModels(provider: CustomProvider) {
   const { id, apiUrl, protocol, apiKey } = provider;
   fetchingId.value = id;
   try {
-    const { data } = await axios.post("/api/providers/models", { apiUrl, protocol, apiKey }, { timeout: 35000 });
+    const { data } = await axios.post("/api/providers/models", { apiUrl, protocol, apiKey, providerId: id }, { timeout: 35000 });
     if (data.code !== 200 || !Array.isArray(data.data)) throw new Error(data.message || "获取模型列表失败");
     if (!data.data.length) throw new Error("未获取到可用模型，请检查 API Key 后重试");
     await saveSettings(settings => {

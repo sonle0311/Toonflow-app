@@ -90,7 +90,7 @@ const providerRules = computed(() =>
 );
 
 watch(
-  [visible, activeProvider, () => formValues.value.apiKey, modelRefresh],
+  [visible, activeProvider, () => formValues.value.apiKey, () => formValues.value.apiUrl, modelRefresh],
   ([isVisible, provider, key], _previous, onCleanup) => {
     models.value = [];
     modelError.value = "";
@@ -109,7 +109,8 @@ watch(
     const timer = setTimeout(async () => {
       try {
         const { data } = await axios.post("/api/providers/models", {
-          apiUrl: provider.apiUrl, protocol: provider.protocol, apiKey,
+          apiUrl: typeof formValues.value.apiUrl === "string" ? formValues.value.apiUrl.trim() : provider.apiUrl,
+          protocol: provider.protocol, apiKey, providerId: provider.id,
         }, { signal: controller.signal, timeout: 35000 });
         if (controller.signal.aborted) return;
         if (data.code !== 200 || !Array.isArray(data.data)) throw new Error(data.message || "获取模型列表失败");
@@ -154,7 +155,7 @@ async function addProvider() {
       label: provider.label,
       icon: provider.icon,
       apiKey,
-      apiUrl: "apiUrl" in provider ? provider.apiUrl : "",
+      apiUrl: typeof values.apiUrl === "string" ? values.apiUrl.trim() : provider.apiUrl,
       protocol: "protocol" in provider ? provider.protocol : "",
       models: models.value.map(model => ({ ...model })),
     };

@@ -13,7 +13,8 @@ export default router.post("/", validateFields({
   }, "请填写不含查询参数的 HTTP API 基础地址"),
   protocol: z.enum(["openai-completions", "openai-responses", "anthropic-messages"]),
   apiKey: z.string().max(8192),
+  providerId: z.string().max(96).optional(),
 }), async (req, res) => {
-  const { apiUrl, protocol, apiKey } = req.body as { apiUrl: string; protocol: string; apiKey: string };
-  res.json(success(await u.ai.fetchProviderModels({ apiUrl, protocol, apiKey })));
+  const { apiUrl, protocol, apiKey, providerId } = req.body as { apiUrl: string; protocol: string; apiKey: string; providerId?: string };
+  res.json(success(await u.ai.fetchProviderModels({ apiUrl, protocol, apiKey, providerId })));
 });

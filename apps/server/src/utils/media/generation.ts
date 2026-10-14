@@ -30,19 +30,24 @@ function imageOptions(value: unknown, pattern: RegExp) {
 
 export async function listMediaModels(): Promise<MediaModel[]> {
   const installedProviders = await listMediaProviders();
-  return installedProviders.flatMap(provider => provider.models.flatMap(model => {
-    if (model.type !== "image" && model.type !== "video" && model.type !== "audio") return [];
-    const builtIn = (mediaProviders as readonly Provider[]).find(item => item.id === provider.id)?.models.find(item => item.id === model.id);
-    return [{
-      providerId: provider.id, providerLabel: provider.label, modelId: model.id, label: model.label, type: model.type,
-      mode: model.mode, durationResolutionMap: model.durationResolutionMap, audio: model.audio,
-      ...(model.type === "audio" ? { voices: model.voices } : {}),
-      ...(model.type === "image" ? {
-        imageSizes: imageOptions(Array.isArray(model.imageSizes) ? model.imageSizes : builtIn?.imageSizes, /^[^\u0000-\u001f\u007f]+$/),
-        imageRatios: imageOptions(Array.isArray(model.imageRatios) ? model.imageRatios : builtIn?.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
-      } : {}),
-    } as MediaModel];
-  }));
+  const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
+  return installedProviders.flatMap(provider => {
+    const config = { ...Object.fromEntries(provider.rules.map(rule => [rule.field, rule.value])), ...record(configurations[provider.id]) };
+    if (provider.rules.some(rule => rule.field === "apiKey") && (typeof config.apiKey !== "string" || !config.apiKey.trim())) return [];
+    return provider.models.flatMap(model => {
+      if (model.type !== "image" && model.type !== "video" && model.type !== "audio") return [];
+      const builtIn = (mediaProviders as readonly Provider[]).find(item => item.id === provider.id)?.models.find(item => item.id === model.id);
+      return [{
+        providerId: provider.id, providerLabel: provider.label, modelId: model.id, label: model.label, type: model.type,
+        mode: model.mode, durationResolutionMap: model.durationResolutionMap, audio: model.audio,
+        ...(model.type === "audio" ? { voices: model.voices } : {}),
+        ...(model.type === "image" ? {
+          imageSizes: imageOptions(Array.isArray(model.imageSizes) ? model.imageSizes : builtIn?.imageSizes, /^[^\u0000-\u001f\u007f]+$/),
+          imageRatios: imageOptions(Array.isArray(model.imageRatios) ? model.imageRatios : builtIn?.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
+        } : {}),
+      } as MediaModel];
+    });
+  });
 }
 
 function detectMimeType(bytes: Uint8Array, fallback: string) {

@@ -120,13 +120,13 @@ export function saveSettings(update?: (current: Record<string, unknown>) => Reco
     if (data.code !== 200) throw new Error("保存设置失败");
     const providers = data.data?.customProviders;
     if ((patch && Object.hasOwn(patch, "customProviders")) || providers) invalidateNodeModels("language");
+    if ((patch && Object.hasOwn(patch, "mediaProviderConfigs")) || data.data?.mediaProvider) invalidateNodeModels("media");
     if (patch || providers) {
       applyingSettings = true;
       try { settings.value = { ...settings.value, ...patch, ...(providers ? { customProviders: providers } : {}) }; }
       finally { applyingSettings = false; }
     }
     if (data.data?.mediaProvider) {
-      invalidateNodeModels("media");
       window.dispatchEvent(new CustomEvent("toonflow:plugin-installed", { detail: { type: "provider", name: data.data.mediaProvider.id } }));
     }
     if (data.data?.modelRefreshErrors?.length) ElMessage.warning(`API Key 已保存，部分模型获取失败：${data.data.modelRefreshErrors.join("；")}`);

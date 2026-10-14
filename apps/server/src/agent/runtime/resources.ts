@@ -1,8 +1,8 @@
-import { t } from "@/lib/i18n";
+import { getLocale, t } from "@/lib/i18n";
 import { readFile } from "@toonflow/file";
 import { join } from "node:path";
 import { DefaultResourceLoader, SettingsManager, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { buildSystemPrompt } from "@/agent/runtime/prompt";
+import { buildResponseLanguagePrompt, buildSystemPrompt } from "@/agent/runtime/prompt";
 import { loadAgentSkills } from "@/agent/skills";
 import { resolveWorkspacePath } from "@/utils/workspace/files";
 import { isMemoryEnabled, readDocument } from "@/utils/personalization";
@@ -11,6 +11,7 @@ import conf from "@/utils/conf";
 export async function createAgentResources(cwd: string, tools: ToolDefinition[], settings = SettingsManager.inMemory(), instructions = "") {
   const savedPrompt = conf.get("settings", {}).agentSystemPrompt;
   const systemPrompt = typeof savedPrompt === "string" ? savedPrompt : undefined;
+  const languagePrompt = buildResponseLanguagePrompt(getLocale());
   const agentDir = join(cwd, ".agent");
   const { path: agentsPath } = await resolveWorkspacePath(cwd, "AGENTS.md");
   const agentsContent = await readFile(agentsPath, "utf8").catch((error: NodeJS.ErrnoException) => {
@@ -40,6 +41,7 @@ export async function createAgentResources(cwd: string, tools: ToolDefinition[],
     appendSystemPrompt: [
       globalAgents.content.trim() ? `## 全局协作规范（AGENTS.md）\n${globalAgents.content}` : "",
       memory.content.trim() ? `## 全局长期记忆\n以下是跨对话保存的偏好与事实，使用前核对适用项目，以用户本轮要求为准。\n<global_memory>\n${memory.content}\n</global_memory>` : "",
+      languagePrompt,
     ].filter(Boolean),
   });
   await resourceLoader.reload();

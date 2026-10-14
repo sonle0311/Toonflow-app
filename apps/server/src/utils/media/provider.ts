@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import { createContext, SourceTextModule } from "node:vm";
 import type { AudioConvertOptions, Provider, ProviderTools } from "@toonflow/providers";
 import tfRouter from "@toonflow/providers/media/tfRouter";
+import grok2Api from "@toonflow/providers/media/grok2Api";
+import chatgpt2Api from "@toonflow/providers/media/chatgpt2Api";
 import { parse, parseExpression } from "@babel/parser";
 import { z } from "zod";
 import conf from "@/utils/conf";
@@ -326,13 +328,28 @@ export async function refreshMediaProviderModels(fileName: string, revision?: st
   if (!provider.modelsUrl) invalid("供应商未配置 modelsUrl");
   const apiKey = getMediaProviderApiKey(provider.id);
   if (expectedApiKey !== undefined && apiKey !== expectedApiKey) invalid("供应商配置已变更，请重试", 409);
+  if (provider.id === chatgpt2Api.id && !apiKey) invalid("请填写 ChatGPT2API API Key");
   const modelTypes = provider.id === tfRouter.id && !modelType ? ["video", "image", "audio"] : [modelType];
   // ACT: 各类型只并行获取，汇总后保存一次，避免同一供应商文件发生版本冲突。
   const models = (await Promise.all(modelTypes.map(async requestedModelType => {
     const modelsUrl = new URL(provider.modelsUrl!);
-    if (requestedModelType) modelsUrl.searchParams.set("type", requestedModelType);
+    if (provider.id === grok2Api.id) {
+      const configUrl: unknown = conf.get(`settings.mediaProviderConfigs.${provider.id}.baseUrl`);
+      const baseUrl = new URL(typeof configUrl === "string" && configUrl.trim() ? configUrl.trim() : grok2Api.modelsUrl.replace(/\/models$/, ""));
+      if (!["http:", "https:"].includes(baseUrl.protocol) || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) invalid("Grok2API API Base URL 无效");
+      baseUrl.pathname = `${baseUrl.pathname.replace(/\/+$/, "") || "/v1"}/models`;
+      modelsUrl.href = baseUrl.href;
+    } else if (provider.id === chatgpt2Api.id) {
+      const configUrl: unknown = conf.get(`settings.mediaProviderConfigs.${provider.id}.baseUrl`);
+      let baseUrl: URL;
+      try { baseUrl = new URL(typeof configUrl === "string" && configUrl.trim() ? configUrl.trim() : chatgpt2Api.modelsUrl.replace(/\/models$/, "")); }
+      catch { return invalid("ChatGPT2API API Base URL 无效"); }
+      if (!["http:", "https:"].includes(baseUrl.protocol) || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) invalid("ChatGPT2API API Base URL 无效");
+      baseUrl.pathname = `${baseUrl.pathname.replace(/\/+$/, "") || "/v1"}/models`;
+      modelsUrl.href = baseUrl.href;
+    } else if (requestedModelType) modelsUrl.searchParams.set("type", requestedModelType);
     const response = await fetch(modelsUrl, {
-      headers: { Accept: "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+      headers: { Accept: "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}), ...(provider.id === chatgpt2Api.id ? { "Accept-Language": "vi-VN" } : {}) },
       signal: AbortSignal.timeout(30000), redirect: "error",
     });
     if (!response.ok) throw new Error(t`获取媒体模型列表失败（HTTP ${response.status}）`);
@@ -346,23 +363,45 @@ export async function refreshMediaProviderModels(fileName: string, revision?: st
       }).catchall(z.json()).optional(),
     })).max(2000) }).parse(await response.json());
     if (!result.data.length) throw new Error("未获取到媒体模型，保留原有列表");
-    const requestedType = z.enum(["text", "image", "video", "audio"]).safeParse(modelsUrl.searchParams.get("type"));
-    return result.data.map(({ modelInfo, ...model }) => {
+    const requestedType = z.enum(["text", "image", "video", "audio"]).safeParse(requestedModelType ?? modelsUrl.searchParams.get("type"));
+    const availableModels = provider.id === grok2Api.id ? result.data.filter(model => {
+      const previous = provider.models.find(item => item.id === model.id)
+        ?? grok2Api.models.find(item => item.id === model.id.split("/").at(-1));
+      const type = model.type ?? previous?.type;
+      return (type === "image" || type === "video") && (!requestedType.success || type === requestedType.data);
+    }) : provider.id === chatgpt2Api.id ? result.data.filter(model => {
+      const type = model.type ?? chatgpt2Api.models.find(item => item.id === model.id.trim())?.type;
+      return type === "image" && (!requestedType.success || requestedType.data === "image");
+    }) : result.data;
+    if (!availableModels.length) throw new Error("未获取到可用媒体模型，保留原有列表；请检查密钥权限或配置自定义 Model Routes");
+    return availableModels.map(({ modelInfo, ...model }) => {
       const id = model.id.trim();
+      const imageFallback = provider.id === chatgpt2Api.id ? chatgpt2Api.models.find(item => item.id === id) : undefined;
       const previous = provider.models.find(item => item.id === id)
-        ?? (provider.id === tfRouter.id ? tfRouter.models.find(item => item.id === id) : undefined);
-      const type = model.type ?? (requestedType.success ? requestedType.data : previous?.type);
+        ?? (provider.id === tfRouter.id ? tfRouter.models.find(item => item.id === id)
+          : provider.id === grok2Api.id ? grok2Api.models.find(item => item.id === id.split("/").at(-1))
+          : imageFallback);
+      const type = provider.id === chatgpt2Api.id ? "image" : model.type ?? (requestedType.success ? requestedType.data : previous?.type);
       if (!type) invalid(t`模型 ${id} 缺少 type，请在返回数据或 modelsUrl 的 type 参数中指定`);
       if (requestedType.success && type !== requestedType.data) invalid(t`模型 ${id} 的 type 与请求类型不一致`);
       // ACT: modelInfo 覆盖已有能力；缺省字段沿用同名配置，新模型不猜测生成能力。
-      const merged = { ...previous, ...model, ...modelInfo, id, label: model.label ?? previous?.label
+      const merged = { ...imageFallback, ...previous, ...model, ...modelInfo, id, label: model.label ?? previous?.label ?? imageFallback?.label
         ?? (typeof model.display_name === "string" ? model.display_name : typeof model.displayName === "string" ? model.displayName : id), type };
       Reflect.deleteProperty(merged, "modelInfo");
+      if (provider.id === chatgpt2Api.id) {
+        merged.mode = ["text"];
+        const imageSizes = Array.isArray(merged.imageSizes) ? merged.imageSizes.filter(size => typeof size === "string"
+          && (size === "auto" || (/^[1-9]\d*x[1-9]\d*$/.test(size) && size.split("x").every(value => Number.isSafeInteger(Number(value)))))) : [];
+        const imageRatios = Array.isArray(merged.imageRatios) ? merged.imageRatios.filter(ratio => typeof ratio === "string" && /^[1-9]\d{0,3}:[1-9]\d{0,3}$/.test(ratio)) : [];
+        merged.imageSizes = imageSizes.length ? [...new Set(imageSizes)] : ["auto"];
+        merged.imageRatios = imageRatios.length ? [...new Set(imageRatios)] : [...chatgpt2Api.models[0].imageRatios];
+      }
       return merged;
     });
   }))).flat();
   const types = new Set(models.map(model => model.type));
-  return saveMediaProvider(fileName, [...provider.models.filter(model => !types.has(model.type)), ...models], provider.revision, apiKey);
+  const preserved = provider.id === chatgpt2Api.id || (provider.id === grok2Api.id && !modelType) ? [] : provider.models.filter(model => !types.has(model.type));
+  return saveMediaProvider(fileName, [...preserved, ...models], provider.revision, apiKey);
 }
 
 export async function deleteMediaProvider(fileName: string, revision: string) {

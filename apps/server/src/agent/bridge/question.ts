@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { QuestionAnswer, QuestionContext, QuestionRequest } from "@toonflow/tools-scaffold/runtime";
 import type { AgentEvent } from "@/agent/runtime/types";
+import { translateMessage } from "@/lib/i18n";
 
 type PendingQuestion = { cwd: string; request: QuestionRequest; cancel(): void; finish(result: QuestionAnswer | Error): void };
 
@@ -49,7 +50,7 @@ export function answerQuestion(cwd: string, callId: string, response: { answer?:
     return;
   }
   if (response.skipped) {
-    const result: QuestionAnswer = { answer: "用户跳过了本次提问", skipped: true };
+    const result: QuestionAnswer = { answer: translateMessage("用户跳过了本次提问"), skipped: true };
     pending.finish(result);
     return result;
   }
@@ -72,9 +73,9 @@ export function answerQuestion(cwd: string, callId: string, response: { answer?:
     const values = parsed.data as NonNullable<QuestionAnswer["values"]>;
     const answer = fields.filter(field => values[field.field] !== undefined).map(field => {
       const value = values[field.field];
-      return `${field.title}：${Array.isArray(value) ? value.join("、") : typeof value === "boolean" ? value ? "是" : "否" : value}`;
+      return `${field.title}：${Array.isArray(value) ? value.join("、") : typeof value === "boolean" ? translateMessage(value ? "是" : "否") : value}`;
     }).join("\n");
-    result = { answer: answer || "未填写可选项", values };
+    result = { answer: answer || translateMessage("未填写可选项"), values };
   } else {
     const parsed = z.string().trim().min(1).max(8000).safeParse(response.answer);
     if (!parsed.success) throw Object.assign(new Error("请输入回答"), { status: 400 });

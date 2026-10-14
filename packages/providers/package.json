@@ -11,9 +11,12 @@
     "./types": "./types.d.ts",
     "./language/tfRouter": "./src/language/tfRouter.ts",
     "./language/deepSeek": "./src/language/deepSeek.ts",
+    "./language/grok2Api": "./src/language/grok2Api.ts",
     "./media/tfRouter": "./src/media/tfRouter.ts",
     "./media/apiMart": "./src/media/apiMart.ts",
     "./media/metaso": "./src/media/metaso.ts",
-    "./media/compshare": "./src/media/compshare.ts"
+    "./media/compshare": "./src/media/compshare.ts",
+    "./media/grok2Api": "./src/media/grok2Api.ts",
+    "./media/chatgpt2Api": "./src/media/chatgpt2Api.ts"
   }
 }

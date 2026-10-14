@@ -6,9 +6,9 @@
       <el-tag size="small" :type="answer && !skipped ? 'success' : 'info'">{{ statusText }}</el-tag>
     </div>
     <template v-if="tool.status === 'error'">
-      <p class="questionText">表单暂时未生成，请 AI 重新整理。</p>
+      <p class="questionText">{{ translateMessage("表单暂时未生成，请 AI 重新整理。") }}</p>
       <details v-if="tool.result" class="errorDetails">
-        <summary>查看错误详情</summary>
+        <summary>{{ translateMessage("查看错误详情") }}</summary>
         <pre class="errorText">{{ tool.result }}</pre>
       </details>
     </template>
@@ -18,7 +18,7 @@
       <template v-else>
         <el-radio-group v-if="options.length" v-model="selected" class="questionOptions" :disabled="submitting" :aria-label="question">
           <el-radio v-for="option in options" :key="option" :value="option" border>{{ option }}</el-radio>
-          <el-radio value="" border>自行填写</el-radio>
+          <el-radio value="" border>{{ translateMessage("自行填写") }}</el-radio>
         </el-radio-group>
         <el-input
           v-model="text"
@@ -26,15 +26,15 @@
           :autosize="{ minRows: 2, maxRows: 6 }"
           :disabled="submitting"
           :maxlength="8000"
-          :placeholder="options.length ? '也可以直接回答或补充说明' : '输入你的回答'"
-          aria-label="回答问题" />
-        <el-text v-if="draftAnswer.length > 8000" type="danger">回答（含选项）不能超过 8000 字</el-text>
+          :placeholder="translateMessage(options.length ? '也可以直接回答或补充说明' : '输入你的回答')"
+          :aria-label="translateMessage('回答问题')" />
+        <el-text v-if="draftAnswer.length > 8000" type="danger">{{ translateMessage("回答（含选项）不能超过 8000 字") }}</el-text>
       </template>
       <div class="questionActions">
         <el-button type="primary" :loading="submitting" :disabled="(!toolSessionId && !directory) || (formRules.length ? !formApi : !draftAnswer || draftAnswer.length > 8000)" @click="submitAnswer(false)">
-          提交回答
+          {{ translateMessage("提交回答") }}
         </el-button>
-        <el-button :disabled="(!toolSessionId && !directory) || submitting" @click="submitAnswer(true)">跳过</el-button>
+        <el-button :disabled="(!toolSessionId && !directory) || submitting" @click="submitAnswer(true)">{{ translateMessage("跳过") }}</el-button>
       </div>
     </template>
     <p v-else-if="answer" class="answerText">{{ answer }}</p>
@@ -79,8 +79,10 @@ for (const component of [
 </script>
 
 <script setup lang="ts">
-const props = defineProps<{ tool: ToolCall; directory?: string; toolSessionId?: string }>();
-const title = computed(() => props.tool.question?.title || (typeof props.tool.args?.title === "string" ? props.tool.args.title.trim() : "") || "请确认");
+const props = defineProps<{ tool: ToolCall; directory?: string; toolSessionId?: string; translateMessage?: (message: string, values?: Record<string, unknown>) => string }>();
+const translateMessage = (message: string, values?: Record<string, unknown>) => props.translateMessage?.(message, values)
+  ?? message.replace(/\{(\w+)\}/g, (token, key: string) => String(values?.[key] ?? token));
+const title = computed(() => props.tool.question?.title || (typeof props.tool.args?.title === "string" ? props.tool.args.title.trim() : "") || translateMessage("请确认"));
 const selected = ref("");
 const text = ref("");
 const submitting = ref(false);
@@ -104,7 +106,7 @@ const formRules = computed<Rule[]>(() => (props.tool.question?.fields ?? []).map
   validate: field.required ? [{
     required: true,
     type: field.type === "checkbox" ? "array" : field.type === "inputNumber" ? "number" : field.type === "switch" ? "boolean" : "string",
-    message: `请填写${field.title}`,
+    message: translateMessage("请填写{0}", { "0": field.title }),
     ...(field.type === "checkbox" ? { min: 1 } : {}),
     ...(["input", "textarea"].includes(field.type) ? { whitespace: true } : {}),
   }] : [],
@@ -129,11 +131,11 @@ const answer = computed(() => {
 const waiting = computed(() => props.tool.status === "running" && !!props.tool.question?.callId && !answer.value);
 const draftAnswer = computed(() => [selected.value, text.value.trim()].filter(Boolean).join("\n"));
 const statusText = computed(() => {
-  if (props.tool.status === "error") return "待重新生成";
-  if (skipped.value) return "已跳过";
-  if (answer.value) return "已回答";
-  if (props.tool.status === "interrupted") return "已停止";
-  return waiting.value ? "等待回答" : "提问记录";
+  if (props.tool.status === "error") return translateMessage("待重新生成");
+  if (skipped.value) return translateMessage("已跳过");
+  if (answer.value) return translateMessage("已回答");
+  if (props.tool.status === "interrupted") return translateMessage("已停止");
+  return translateMessage(waiting.value ? "等待回答" : "提问记录");
 });
 
 async function submitAnswer(skip: boolean) {
@@ -149,12 +151,12 @@ async function submitAnswer(skip: boolean) {
       callId,
       ...(skip ? { skipped: true } : formRules.value.length ? { values: formApi.value!.formData() } : { answer: value }),
     }, { headers: { "x-toonflow-workspace": "1" } });
-    if (response.data.code !== 200) throw new Error(response.data.message || "提交回答失败");
+    if (response.data.code !== 200) throw new Error(response.data.message || translateMessage("提交回答失败"));
     submittedAnswer.value = response.data.data.answer;
     submittedSkipped.value = response.data.data.skipped === true;
   } catch (error) {
     const message = axios.isAxiosError(error) ? error.response?.data?.message : undefined;
-    ElMessage.error(message || (error instanceof Error ? error.message : "提交回答失败"));
+    ElMessage.error(message || (error instanceof Error ? error.message : translateMessage("提交回答失败")));
   } finally {
     submitting.value = false;
   }

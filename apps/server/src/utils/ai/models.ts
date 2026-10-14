@@ -6,9 +6,10 @@ const modelSchema = z.object({
   display_name: z.string().optional(), displayName: z.string().optional(),
   inputTokenLimit: z.number().int().positive().optional(),
   outputTokenLimit: z.number().int().positive().optional(),
+  type: z.string().optional(),
 });
 
-export async function fetchProviderModels({ apiUrl, protocol, apiKey }: { apiUrl: string; protocol: string; apiKey: string }) {
+export async function fetchProviderModels({ apiUrl, protocol, apiKey, providerId }: { apiUrl: string; protocol: string; apiKey: string; providerId?: string }) {
   const url = new URL(apiUrl);
   if (url.pathname === "/") url.pathname = "/v1";
   url.pathname = `${url.pathname.replace(/\/+$/, "")}/models`;
@@ -33,6 +34,9 @@ export async function fetchProviderModels({ apiUrl, protocol, apiKey }: { apiUrl
     for (const item of items) {
       const id = item.id?.trim();
       if (!id) throw new Error("模型列表包含无效的模型 ID");
+      // ACT: Grok2API 共用模型目录；保留准确的 namespace ID，媒体模型在媒体设置中配置。
+      if (providerId === "grok2Api" && (["image", "video", "audio"].includes(item.type ?? "")
+        || /^(?:grok-imagine-(?:image|video)|grok-voice|grok-audio|grok-stt)/i.test(id.split("/").at(-1)!))) continue;
       models.set(id, { id, label: item.display_name || item.displayName || id, contextWindow: item.inputTokenLimit, maxOutputTokens: item.outputTokenLimit });
     }
     const cursor = protocol === "anthropic-messages" && result.has_more ? result.last_id : undefined;

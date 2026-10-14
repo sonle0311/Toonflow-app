@@ -218,7 +218,7 @@ async function fetchModels() {
   try {
     const { data } = await axios.post(
       "/api/providers/models",
-      { apiUrl: form.apiUrl.trim(), protocol: form.protocol, apiKey: form.apiKey.trim() },
+      { apiUrl: form.apiUrl.trim(), protocol: form.protocol, apiKey: form.apiKey.trim(), providerId: form.id },
       { signal: controller.signal, timeout: 35000 }
     );
     if (controller.signal.aborted) return;
