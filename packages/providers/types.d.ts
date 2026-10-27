@@ -13,6 +13,7 @@ type VideoMode =
 
 interface ProviderModel {
   id: string;
+  aliases?: string[];
   label: string;
   type: ModelType;
   think?: boolean;
@@ -21,7 +22,7 @@ interface ProviderModel {
   audio?: "optional" | boolean;
   imageSizes?: string[];
   imageRatios?: string[];
-  durationResolutionMap?: { duration: number[]; resolution: string[] }[];
+  durationResolutionMap?: { duration: number[]; resolution: string[]; mode?: VideoMode }[];
   voices?: { title: string; voice: string }[];
 }
 

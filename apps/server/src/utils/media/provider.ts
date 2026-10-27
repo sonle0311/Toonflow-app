@@ -8,6 +8,7 @@ import type { AudioConvertOptions, Provider, ProviderTools } from "@toonflow/pro
 import tfRouter from "@toonflow/providers/media/tfRouter";
 import grok2Api from "@toonflow/providers/media/grok2Api";
 import chatgpt2Api from "@toonflow/providers/media/chatgpt2Api";
+import flow2Api, { flowConnection, flowModels } from "@toonflow/providers/media/flow2Api";
 import { parse, parseExpression } from "@babel/parser";
 import { z } from "zod";
 import conf from "@/utils/conf";
@@ -328,6 +329,25 @@ export async function refreshMediaProviderModels(fileName: string, revision?: st
   if (!provider.modelsUrl) invalid("供应商未配置 modelsUrl");
   const apiKey = getMediaProviderApiKey(provider.id);
   if (expectedApiKey !== undefined && apiKey !== expectedApiKey) invalid("供应商配置已变更，请重试", 409);
+  if (provider.id === flow2Api.id) {
+    if (!apiKey) invalid("Vui lòng nhập API Key máy chủ Flow2API hợp lệ");
+    const storedConfig: unknown = conf.get(`settings.mediaProviderConfigs.${provider.id}`);
+    const config = storedConfig && typeof storedConfig === "object" && !Array.isArray(storedConfig) ? storedConfig as Record<string, unknown> : {};
+    const connection = flowConnection(config);
+    const signal = AbortSignal.timeout(30000);
+    // ACT: Catalog discovery uses no quota; readiness is checked before generation.
+    const response = await fetch(`${connection.baseUrl}/models`, {
+      headers: { Accept: "application/json", Authorization: `Bearer ${connection.apiKey}` }, signal, redirect: "error",
+    });
+    if (!response.ok) {
+      const detail = await responseErrorMessage(response, config);
+      throw new Error(`Không lấy được model Flow2API (HTTP ${response.status})${detail ? `: ${detail}` : ""}`);
+    }
+    const models = mediaModelsSchema.parse(flowModels(await response.json())).filter(model => !modelType || model.type === modelType);
+    if (!models.length) invalid("Flow2API không trả về model ảnh/video được hỗ trợ; danh sách cũ được giữ lại.");
+    const preserved = modelType ? provider.models.filter(model => model.type !== modelType) : [];
+    return saveMediaProvider(fileName, [...preserved, ...models], provider.revision, apiKey);
+  }
   if (provider.id === chatgpt2Api.id && !apiKey) invalid("请填写 ChatGPT2API API Key");
   const modelTypes = provider.id === tfRouter.id && !modelType ? ["video", "image", "audio"] : [modelType];
   // ACT: 各类型只并行获取，汇总后保存一次，避免同一供应商文件发生版本冲突。
@@ -357,7 +377,10 @@ export async function refreshMediaProviderModels(fileName: string, revision?: st
       modelInfo: z.object({
         mode: z.array(z.union([z.string().min(1), z.array(z.string().min(1))])).optional(),
         audio: z.union([z.literal("optional"), z.boolean()]).optional(),
-        durationResolutionMap: z.array(z.object({ duration: z.array(z.number().positive()), resolution: z.array(z.string().min(1)) })).optional(),
+        durationResolutionMap: z.array(z.object({
+          duration: z.array(z.number().positive()), resolution: z.array(z.string().min(1)),
+          mode: z.union([z.string().min(1), z.array(z.string().min(1))]).optional(),
+        })).optional(),
         imageSizes: z.array(z.string().min(1)).optional(),
         imageRatios: z.array(z.string().min(1)).optional(),
       }).catchall(z.json()).optional(),

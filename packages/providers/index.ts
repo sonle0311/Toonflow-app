@@ -9,6 +9,7 @@ import metaso from "./src/media/metaso";
 import compshare from "./src/media/compshare";
 import grok2ApiMedia from "./src/media/grok2Api";
 import chatgpt2Api from "./src/media/chatgpt2Api";
+import flow2Api from "./src/media/flow2Api";
 
 export type Provider = ProviderDefinition;
 export type ProviderTools = ProviderContext["tool"];
@@ -16,4 +17,4 @@ export type AudioConvertOptions = Parameters<ProviderTools["audio"]["convert"]>[
 export type { FfmpegFactory, FfmpegCommand } from "@toonflow/ffmpeg/types";
 
 export const languageProviders = [tfRouterLanguage, deepSeek, grok2ApiLanguage] as const;
-export const mediaProviders = [tfRouterMedia, apiMart, metaso, compshare, grok2ApiMedia, chatgpt2Api] as const;
+export const mediaProviders = [tfRouterMedia, apiMart, metaso, compshare, grok2ApiMedia, chatgpt2Api, flow2Api] as const;

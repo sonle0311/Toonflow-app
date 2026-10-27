@@ -26,7 +26,7 @@
           </el-select>
         </div>
       </div>
-      <div class="sectionLabel">通用比例</div>
+      <div class="sectionLabel">画面比例</div>
       <div class="ratioOptions" role="group" aria-label="视频比例">
         <el-button v-for="item in ratios" :key="item" class="ratioButton" :disabled="disabled" :aria-label="`比例 ${item}`" :aria-pressed="ratio === item" @click="ratio = item">
           <span class="ratioContent">
@@ -62,7 +62,7 @@ const modes = computed(() => (props.model?.mode ?? []).map(item => ({
   value: JSON.stringify(item),
   label: Array.isArray(item) ? "混合参考" : modeLabels[item] ?? item,
 })));
-const mappings = computed(() => props.model?.durationResolutionMap ?? []);
+const mappings = computed(() => (props.model?.durationResolutionMap ?? []).filter(item => item.mode === undefined || JSON.stringify(item.mode) === mode.value));
 const durations = computed(() => [...new Set(mappings.value.flatMap(item => item.duration))].sort((a, b) => a - b));
 const resolutions = computed(() => resolutionsFor(duration.value));
 

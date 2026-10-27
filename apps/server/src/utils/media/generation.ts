@@ -24,8 +24,8 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function imageOptions(value: unknown, pattern: RegExp) {
-  return Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === "string" && item.length <= 64 && item === item.trim() && pattern.test(item)))] : undefined;
+function stringOptions(value: unknown, pattern: RegExp, maxLength = 64) {
+  return Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === "string" && item.length <= maxLength && item === item.trim() && pattern.test(item)))] : undefined;
 }
 
 export async function listMediaModels(): Promise<MediaModel[]> {
@@ -39,12 +39,14 @@ export async function listMediaModels(): Promise<MediaModel[]> {
       const builtIn = (mediaProviders as readonly Provider[]).find(item => item.id === provider.id)?.models.find(item => item.id === model.id);
       return [{
         providerId: provider.id, providerLabel: provider.label, modelId: model.id, label: model.label, type: model.type,
+        aliases: stringOptions(model.aliases, /^[^\u0000-\u001f\u007f]+$/, 200),
         mode: model.mode, durationResolutionMap: model.durationResolutionMap, audio: model.audio,
         ...(model.type === "audio" ? { voices: model.voices } : {}),
         ...(model.type === "image" ? {
-          imageSizes: imageOptions(Array.isArray(model.imageSizes) ? model.imageSizes : builtIn?.imageSizes, /^[^\u0000-\u001f\u007f]+$/),
-          imageRatios: imageOptions(Array.isArray(model.imageRatios) ? model.imageRatios : builtIn?.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
+          imageSizes: stringOptions(Array.isArray(model.imageSizes) ? model.imageSizes : builtIn?.imageSizes, /^[^\u0000-\u001f\u007f]+$/),
+          imageRatios: stringOptions(Array.isArray(model.imageRatios) ? model.imageRatios : builtIn?.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/),
         } : {}),
+        ...(model.type === "video" ? { imageRatios: stringOptions(model.imageRatios, /^[1-9]\d{0,3}:[1-9]\d{0,3}$/) } : {}),
       } as MediaModel];
     });
   });
@@ -145,7 +147,7 @@ export async function generateMedia(
   const outputDirectory = request.outputDirectory ?? "assets/generated";
   await resolveWorkspacePath(directory, outputDirectory, true);
   const providerInfo = await getMediaProvider(request.providerId);
-  const model = providerInfo.models.find(model => model.id === request.modelId && model.type === mediaType);
+  const model = providerInfo.models.find(model => model.type === mediaType && (model.id === request.modelId || Array.isArray(model.aliases) && model.aliases.includes(request.modelId)));
   if (!model) invalid("所选媒体模型不存在或类型不匹配，请重新选择");
   const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
   const provider = await loadMediaProviderSource(providerInfo.source, record(configurations[providerInfo.id]), signal, undefined, directory);

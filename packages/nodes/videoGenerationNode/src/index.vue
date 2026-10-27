@@ -78,7 +78,7 @@
             v-model:ratio="data.ratio"
             v-model:mode="data.mode"
             v-model:generateAudio="data.generateAudio"
-            :ratios="ratioOptions"
+            :ratios="availableRatios"
             :model="selectedModel"
             :disabled="generating || deleting || !selectedModel" />
           <el-button
@@ -147,9 +147,10 @@ const generationState = useNodeGeneration(outputs, () => generationController?.a
 const { generating } = generationState;
 let generation: Promise<void> | undefined;
 let modelsRequest: Promise<void> | undefined;
-// ACT: 供应商未声明视频比例范围，沿用界面的通用比例，具体支持范围由供应商校验。
+// ACT: Models without declared ratios keep the existing generic choices.
 const ratioOptions = ["16:9", "9:16", "1:1", "4:3", "3:4"];
 const selectedModel = computed(() => models.value.find((item) => JSON.stringify([item.providerId, item.modelId]) === data.value.model));
+const availableRatios = computed(() => getRatios(selectedModel.value));
 const selectedMode = computed(() => selectedModel.value?.mode?.find((item) => JSON.stringify(item) === data.value.mode) as NodeVideoRequest["mode"]);
 const frameMode = computed(() => ["startEndRequired", "endFrameOptional", "startFrameOptional"].includes(String(selectedMode.value)));
 const mediaCounts = computed(() => ({
@@ -158,6 +159,10 @@ const mediaCounts = computed(() => ({
   audio: refList.value.filter((item) => item.dataType === "AUDIO").length,
 }));
 const matchingModes = computed(() => getMatchingModes(selectedModel.value));
+
+function getRatios(choice?: NodeMediaModel) {
+  return choice?.imageRatios?.length ? choice.imageRatios : ratioOptions;
+}
 
 function getMatchingModes(choice?: NodeMediaModel) {
   return (choice?.mode ?? []).filter((mode) => {
@@ -173,32 +178,39 @@ function getMatchingModes(choice?: NodeMediaModel) {
   });
 }
 
-function getDurations(choice: NodeMediaModel) {
-  return [...new Set((choice.durationResolutionMap ?? []).flatMap((item) => item.duration))].sort((a, b) => a - b);
+function getMode(choice: NodeMediaModel, matches = getMatchingModes(choice)) {
+  const modes = choice.mode ?? [];
+  return matches.find((item) => JSON.stringify(item) === data.value.mode) ?? matches.find(Array.isArray)
+    ?? matches.find((item) => item === "singleImage") ?? matches.find((item) => item === "endFrameOptional") ?? matches[0]
+    ?? modes.find((item) => JSON.stringify(item) === data.value.mode) ?? modes.find(Array.isArray) ?? modes[0];
 }
 
-function getResolutions(choice: NodeMediaModel, duration?: number) {
+function getDurations(choice: NodeMediaModel, mode?: string | string[]) {
+  return [...new Set((choice.durationResolutionMap ?? []).filter((item) => item.mode === undefined || JSON.stringify(item.mode) === JSON.stringify(mode))
+    .flatMap((item) => item.duration))].sort((a, b) => a - b);
+}
+
+function getResolutions(choice: NodeMediaModel, duration?: number, mode?: string | string[]) {
   // ACT: 当前视频分辨率使用 p 单位；出现其他单位时再统一换算。
-  return [...new Set((choice.durationResolutionMap ?? []).filter((item) => item.duration.includes(duration!)).flatMap((item) => item.resolution))]
+  return [...new Set((choice.durationResolutionMap ?? []).filter((item) => item.duration.includes(duration!) && (item.mode === undefined || JSON.stringify(item.mode) === JSON.stringify(mode)))
+    .flatMap((item) => item.resolution))]
     .sort((left, right) => (Number.parseFloat(left) || Infinity) - (Number.parseFloat(right) || Infinity));
 }
 // ACT: 引用改变时只替换不适用的模式；普通媒体优先作为参考，避免自动变成首尾帧。
 watch([selectedModel, matchingModes, () => data.value.mode], ([choice, matches]) => {
   if (!choice || matches.some((item) => JSON.stringify(item) === data.value.mode)) return;
-  const modes = choice.mode ?? [];
-  const mode = matches.find(Array.isArray) ?? matches.find((item) => item === "singleImage")
-    ?? matches.find((item) => item === "endFrameOptional") ?? matches[0]
-    ?? modes.find((item) => JSON.stringify(item) === data.value.mode) ?? modes.find(Array.isArray) ?? modes[0];
+  const mode = getMode(choice, matches);
   data.value.mode = mode === undefined ? "" : JSON.stringify(mode);
 }, { flush: "sync" });
 // ACT: 参数在节点内归一化，未选中、未挂载底部设置时也可由 Agent 直接生成。
-watch([selectedModel, () => data.value.duration], ([choice]) => {
+watch([selectedModel, selectedMode, () => data.value.duration], ([choice]) => {
   if (!choice) return;
-  const durations = getDurations(choice);
+  const durations = getDurations(choice, selectedMode.value);
   if (!durations.includes(data.value.duration!)) data.value.duration = durations[0];
-  const resolutions = getResolutions(choice, data.value.duration);
+  const resolutions = getResolutions(choice, data.value.duration, selectedMode.value);
   if (!resolutions.includes(data.value.resolution)) data.value.resolution = resolutions[0] ?? "";
-  if (!ratioOptions.includes(data.value.ratio)) data.value.ratio = "9:16";
+  const ratios = getRatios(choice);
+  if (!ratios.includes(data.value.ratio)) data.value.ratio = ratios.includes("9:16") ? "9:16" : ratios[0]!;
   if (choice.audio !== "optional") data.value.generateAudio = choice.audio === true;
 }, { flush: "sync" });
 const modelGroups = computed(() => groupNodeModels(models.value));
@@ -251,7 +263,10 @@ function loadModels() {
   modelsLoading.value = true;
   modelsRequest = ai.getMediaModels().then((items) => {
     if (generating.value || deleting.value) return;
-    models.value = items.filter((item) => item.type === "video");
+    const choices = items.filter((item) => item.type === "video");
+    const previous = choices.find((item) => item.aliases?.some((alias) => JSON.stringify([item.providerId, alias]) === data.value.model));
+    if (previous) data.value.model = JSON.stringify([previous.providerId, previous.modelId]);
+    models.value = choices;
     // ACT: 只给空配置选默认模型，保留暂时不可用的旧选择及其参数。
     if (!data.value.model) {
       const first = models.value[0];
@@ -347,7 +362,9 @@ function getConfig() {
       generateAudio: data.value.generateAudio,
     },
     models: models.value,
-    ratios: ratioOptions,
+    durations: selectedModel.value ? getDurations(selectedModel.value, selectedMode.value) : [],
+    resolutions: selectedModel.value ? getResolutions(selectedModel.value, data.value.duration, selectedMode.value) : [],
+    ratios: availableRatios.value,
     matchingModes: matchingModes.value,
   };
 }
@@ -372,7 +389,7 @@ nodeTools.register({
     modelId: z.string().min(1).optional(),
     duration: z.number().positive().optional(),
     resolution: z.string().min(1).optional(),
-    ratio: z.enum(ratioOptions).optional(),
+    ratio: z.string().regex(/^[1-9]\d{0,3}:[1-9]\d{0,3}$/).optional(),
     mode: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
     generateAudio: z.boolean().optional(),
   }).refine((args) => (args.providerId === undefined) === (args.modelId === undefined), "providerId 与 modelId 必须同时提供"),
@@ -385,19 +402,22 @@ nodeTools.register({
     const choice = args.modelId === undefined ? selectedModel.value
       : models.value.find((item) => item.providerId === args.providerId && item.modelId === args.modelId);
     if (!choice) throw new Error("请选择 getConfig 返回的有效视频模型");
-    const durations = getDurations(choice);
+    if (args.ratio !== undefined && !getRatios(choice).includes(args.ratio)) throw new Error(`Tỷ lệ không được mô hình hỗ trợ; có thể chọn: ${getRatios(choice).join(", ")}`);
+    const matches = getMatchingModes(choice);
+    if (args.mode !== undefined && !matches.some((item) => JSON.stringify(item) === JSON.stringify(args.mode))) throw new Error("所选模式不受当前模型支持或不适用于当前引用，请根据模型能力及已连接素材选择");
+    const mode = args.mode ?? getMode(choice, matches);
+    const durations = getDurations(choice, mode);
     if (args.duration !== undefined && !durations.includes(args.duration)) throw new Error(`当前模型不支持时长 ${args.duration}，可选：${durations.join("、")}`);
     const duration = args.duration ?? (durations.includes(data.value.duration!) ? data.value.duration : durations[0]);
-    const resolutions = getResolutions(choice, duration);
+    const resolutions = getResolutions(choice, duration, mode);
     if (args.resolution !== undefined && !resolutions.includes(args.resolution)) throw new Error(`当前时长不支持分辨率 ${args.resolution}，可选：${resolutions.join("、")}`);
     const resolution = args.resolution ?? (resolutions.includes(data.value.resolution) ? data.value.resolution : resolutions[0] ?? "");
-    if (args.mode !== undefined && !getMatchingModes(choice).some((item) => JSON.stringify(item) === JSON.stringify(args.mode))) throw new Error("所选模式不受当前模型支持或不适用于当前引用，请根据模型能力及已连接素材选择");
     if (args.generateAudio !== undefined && choice.audio !== "optional" && args.generateAudio !== (choice.audio === true)) throw new Error("当前模型不支持切换声音，请查看 getConfig 返回的 audio 能力");
     data.value.model = JSON.stringify([choice.providerId, choice.modelId]);
+    data.value.mode = mode === undefined ? "" : JSON.stringify(mode);
     data.value.duration = duration;
     data.value.resolution = resolution;
     if (args.ratio !== undefined) data.value.ratio = args.ratio;
-    if (args.mode !== undefined) data.value.mode = JSON.stringify(args.mode);
     if (args.generateAudio !== undefined) data.value.generateAudio = args.generateAudio;
     return getConfig();
   },

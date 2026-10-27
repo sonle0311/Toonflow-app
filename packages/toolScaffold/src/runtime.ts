@@ -75,12 +75,13 @@ export interface MediaModel {
   providerId: string;
   providerLabel: string;
   modelId: string;
+  aliases?: string[];
   label: string;
   type: "image" | "video" | "audio";
   mode?: unknown;
   imageSizes?: string[];
   imageRatios?: string[];
-  durationResolutionMap?: { duration: number[]; resolution: string[] }[];
+  durationResolutionMap?: { duration: number[]; resolution: string[]; mode?: string | string[] }[];
   audio?: boolean | "optional";
   voices?: { title: string; voice: string }[];
 }

@@ -243,7 +243,10 @@ function loadModels() {
   modelsLoading.value = true;
   modelsRequest = ai.getMediaModels().then((items) => {
     if (generating.value || deleting.value) return;
-    models.value = items.filter((item) => item.type === "image");
+    const choices = items.filter((item) => item.type === "image");
+    const previous = choices.find((item) => item.aliases?.some((alias) => JSON.stringify([item.providerId, alias]) === data.value.model));
+    if (previous) data.value.model = JSON.stringify([previous.providerId, previous.modelId]);
+    models.value = choices;
     // ACT: 只给空配置选默认模型，保留暂时不可用的旧选择及其参数。
     if (!data.value.model) {
       const first = models.value[0];
