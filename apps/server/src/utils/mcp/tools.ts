@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
-import { realpath, stat, mkdir, readdir, lstat, rm, rmdir, readFile } from "@toonflow/file";
+import { realpath, stat, mkdir, readdir, readFile } from "@toonflow/file";
 import { z } from "zod";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { CanvasContext } from "@toonflow/tools-scaffold/runtime";
@@ -11,7 +11,9 @@ import conf from "@/utils/conf";
 import { callControl, getConnection, listConnections } from "@/utils/mcp/control";
 import { appOperations, runAppOperation } from "@/utils/mcp/operations";
 import { listTools } from "@/utils/plugins/tools";
-import { isWithin, lockWorkspaceFiles, protectWorkspaceRoot, renameWorkspaceFile, resolveWorkspacePath, writeWorkspaceFile } from "@/utils/workspace/files";
+import { isWithin, lockWorkspaceFiles, protectWorkspaceRoot, renameWorkspaceFile, removeWorkspaceFile, resolveWorkspacePath, writeWorkspaceFile } from "@/utils/workspace/files";
+import { getRuntimePlatform } from "@/lib/platform";
+import { thinkingLevels } from "@/lib/modelReasoning";
 
 const targetSchema = z.strictObject({ connectionId: z.uuid().optional(), directory: z.string().min(1).max(4096).optional(), canvasId: z.string().min(1).max(256).optional() });
 const requestSchema = z.strictObject({ target: targetSchema.optional(), args: z.record(z.string(), z.unknown()) });
@@ -25,8 +27,7 @@ async function resolveDirectory(directory?: string) {
   if (!directory || !isAbsolute(directory)) throw new Error("请在 target.directory 指定绝对工作目录，或先打开项目");
   const path = await realpath(directory);
   if (!(await stat(path)).isDirectory()) throw new Error("工作目录不是文件夹");
-  const desktop = ["win32", "darwin"].includes(process.platform) && (process.env.NODE_ENV === "dev" || process.env.toonflowDesktop === "1");
-  if (!desktop) {
+  if (!getRuntimePlatform().local) {
     const root = await realpath(resolve(dirname(conf.path), "workspaces"));
     if (!isWithin(root, path)) throw new Error("服务器部署只能使用 data/workspaces 内的工作区");
   }
@@ -118,7 +119,7 @@ export async function getMcpTools(): Promise<McpTool[]> {
   }
   const canvasStub: CanvasContext = { id: "mcp", tools: [], async call() { throw new Error("尚未绑定画布"); } };
   // ACT: 插件损坏时仍保留应用管理工具，允许读取错误并修复插件。
-  const definitions = await createAgentTools(dirname(conf.path), canvasStub).catch(error => {
+  const definitions = await createAgentTools(dirname(conf.path), canvasStub, undefined, false).catch(error => {
     pluginError = error instanceof Error ? error.message : String(error);
     return [];
   });
@@ -131,7 +132,7 @@ export async function getMcpTools(): Promise<McpTool[]> {
         id: connection.state.canvasId ?? "mcp", tools: connection.state.tools,
         call: (request, callSignal) => callControl(connection.id, request.name, request.args, callSignal ?? signal, directory),
       } : undefined;
-      const current = (await createAgentTools(directory!, canvas)).find(tool => tool.name === definition.name);
+      const current = (await createAgentTools(directory!, canvas, undefined, false)).find(tool => tool.name === definition.name);
       if (!current) throw new Error("工具已禁用，或所需 Toonflow 页面未连接，请重新读取工具列表");
       // ACT: 现有插件依赖 createTools 注入的宿主能力；MCP 没有 Pi 对话，访问会话能力时明确报错。
       const context = new Proxy({ cwd: directory, mode: "rpc", hasUI: false, model: undefined, signal }, {
@@ -176,8 +177,7 @@ export async function getMcpTools(): Promise<McpTool[]> {
         await writeWorkspaceFile(source.path, bytes, args.exclusive);
       } else if (args.action === "mkdir") await mkdir(source.path);
       else if (destination) await renameWorkspaceFile(source.path, destination.path);
-      else if ((await lstat(source.path)).isDirectory() && !args.recursive) await rmdir(source.path);
-      else await rm(source.path, { recursive: args.recursive });
+      else await removeWorkspaceFile(directory!, source.path, args.recursive);
     } finally { release(); }
     return { success: true };
   }));
@@ -212,7 +212,7 @@ export async function getMcpTools(): Promise<McpTool[]> {
   }));
   const runAgentSchema = z.strictObject({
     prompt: z.string().trim().min(1), providerId: z.string().min(1), modelId: z.string().min(1),
-    sessionFile: z.string().regex(/^[\w-]+\.jsonl$/).optional(), thinkingLevel: z.enum(["off", "low", "medium", "high"]).optional(),
+    sessionFile: z.string().regex(/^[\w-]+\.jsonl$/).optional(), thinkingLevel: z.enum(thinkingLevels).optional(),
   });
   tools.push(wrapTool("runAgent", "按用户请求调用 Toonflow 内置 Agent，等待本轮完成并返回对话文件与回复；会使用配置的模型。外部 Agent 可直接操作其他工具，仅需要委托内置 Agent 时调用。支持 MCP 取消，历史保存到工作区。", z.toJSONSchema(runAgentSchema), async (input, target, signal) => {
     const args = runAgentSchema.parse(input);

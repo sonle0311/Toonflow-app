@@ -24,10 +24,12 @@ const providerTranspiler = new Bun.Transpiler({ loader: "ts", target: "bun", def
 const providerIdSchema = z.string().max(96).regex(/^[a-z][a-zA-Z0-9]*$/)
   .refine(value => !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(value), "供应商 ID 不能是系统保留文件名");
 export const mediaProviderFileSchema = z.string().refine(value => value.endsWith(".ts") && providerIdSchema.safeParse(value.slice(0, -3)).success, "供应商文件名无效");
+const providerRulesSchema = z.array(z.record(z.string(), z.json()));
 export const mediaModelsSchema = z.array(z.object({
   id: z.string().min(1).max(200).refine(value => !!value.trim()),
   label: z.string().min(1).max(200).refine(value => !!value.trim()),
   type: z.enum(["text", "image", "video", "audio"]),
+  rules: providerRulesSchema.optional(),
 }).catchall(z.json())).max(2000).refine(models => new Set(models.map(model => model.id)).size === models.length, "模型 ID 不能重复");
 
 function invalid(message: string, status = 400): never {
@@ -210,17 +212,18 @@ function parseProvider(source: string) {
   }).safeParse(modelsUrl).success) invalid("模型列表地址须为不含凭据或片段的 HTTP URL");
   const models = mediaModelsSchema.safeParse(value("models") ?? [], validationOptions());
   if (!models.success) invalid(models.error.issues.map(issue => translateMessage(issue.message)).join("; "));
-  const rules = z.array(z.record(z.string(), z.json())).safeParse(value("rules") ?? []);
+  const rules = providerRulesSchema.safeParse(value("rules") ?? []);
   if (!rules.success) invalid("供应商 rules 必须为表单配置对象数组");
-  return { object, modelProperty: entries.get("models"), id: id as string, label, icon, version: version?.trim(), readme, modelsUrl: modelsUrl as string | undefined, rules: rules.data, models: models.data };
+  return { object, modelProperty: entries.get("models"), id: id as string, label, icon, version: version?.trim(), readme, modelsUrl: modelsUrl as string | undefined, rules: rules.data, models: models.data,
+    supportsPrice: entries.has("getPrice") || id === tfRouter.id, supportsBalance: entries.has("getBalance") || id === tfRouter.id };
 }
 
 function metadata(fileName: string, source: string) {
-  const { id, label, icon, version, readme, modelsUrl, rules, models } = parseProvider(source);
+  const { id, label, icon, version, readme, modelsUrl, rules, models, supportsPrice, supportsBalance } = parseProvider(source);
   if (fileName !== `${id}.ts`) invalid("供应商 ID 与文件名不一致");
   // ACT: 兼容旧 TF-Router 文件，缺少列表地址时使用内置定义。
   return { fileName, id, label, icon, version, readme, modelsUrl: modelsUrl ?? (id === tfRouter.id ? tfRouter.modelsUrl : undefined), rules, models,
-    revision: createHash("sha256").update(source).digest("hex"), loadError: "" };
+    supportsPrice, supportsBalance, revision: createHash("sha256").update(source).digest("hex"), loadError: "" };
 }
 
 export function validateMediaProviderSource(source: string) {
@@ -459,10 +462,18 @@ export async function loadMediaProviderSource(source: string, config: Record<str
   await module.evaluate({ timeout: 1000 });
   signal?.throwIfAborted();
   const definition = (module.namespace as { default: Provider }).default;
+  // ACT: 已安装 TF-Router 仅补齐缺省查询能力，保留用户适配代码与模型列表。
+  if (id === tfRouter.id) {
+    definition.getPrice ??= tfRouter.getPrice;
+    definition.getBalance ??= tfRouter.getBalance;
+  }
   const rules = Array.isArray(definition.rules) ? definition.rules : [];
   const providerConfig = { ...Object.fromEntries(rules.map(rule => [rule.field, rule.value])), ...structuredClone(config) };
   const provider = {
     ...definition,
+    // 查询上下文使用原始注入 fetch，避免继承某次生成请求的取消信号。
+    queryFetch: fetchRequest,
+    sourceRevision: createHash("sha256").update(source).digest("hex"),
     config: providerConfig,
     signal,
     tool: {

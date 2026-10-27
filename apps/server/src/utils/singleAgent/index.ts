@@ -1,16 +1,19 @@
 import { dirname, join } from "node:path";
+import { mkdir, rm } from "@toonflow/file";
 import { getLocale, t } from "@/lib/i18n";
 import { buildResponseLanguagePrompt } from "@/agent/runtime/prompt";
 import { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import type { AgentSession, CreateAgentSessionOptions, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { QuestionContext } from "@toonflow/tools-scaffold/runtime";
 import { createAgentToolContext } from "@/agent/tools";
 import { createAgentModel } from "@/agent/runtime/model";
+import { configureAgentRequests } from "@/agent/runtime/requests";
 import { getToolResultText } from "@/agent/runtime/sessions";
 import { createQuestionContext, answerQuestion } from "@/agent/bridge/question";
 import { listTools, loadTool, validateToolConfig } from "@/utils/plugins/tools";
 import { browserRuntime } from "@/utils/browser";
 import conf from "@/utils/conf";
+import type { ThinkingLevel } from "@/lib/modelReasoning";
 import type { SingleAgentEvent, SingleAgentResult, SingleAgentStatus, SingleAgentToolDescriptor, SingleAgentToolReference, SingleAgentToolResult } from "./types";
 
 type ClientCall = {
@@ -110,6 +113,7 @@ export async function create(options: {
   signal?.throwIfAborted();
   const id = crypto.randomUUID();
   const cwd = options.directory ?? join(dirname(conf.path), "singleAgent", id);
+  if (!options.directory) await mkdir(cwd, { recursive: true });
   const session: SingleSession = {
     id, cwd, workspaceAvailable: !!options.directory, history: SessionManager.inMemory(cwd),
     systemPrompt: options.systemPrompt ?? "", tools: [], closed: false,
@@ -162,7 +166,7 @@ export async function run(options: {
   prompt: string;
   providerId: string;
   modelId: string;
-  thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
+  thinkingLevel?: ThinkingLevel;
 }, send: (event: SingleAgentEvent) => void, signal?: AbortSignal, onStart?: () => void) {
   const state = getSession(options.sessionId);
   if (state.active) throw Object.assign(new Error("此对话正在运行，请等待当前回复完成"), { status: 409 });
@@ -177,6 +181,7 @@ export async function run(options: {
   const stopSdk = () => { void active.session?.abort(); };
   active.controller.signal.addEventListener("abort", stopSdk, { once: true });
   const toolResults: SingleAgentResult["toolResults"] = [];
+  const imageToolResults = new Map<string, SingleAgentToolResult>();
   try {
     onStart?.();
     setStatus(active, "running");
@@ -191,14 +196,21 @@ export async function run(options: {
         await waitForResume(active);
         active.activeActions++;
         const signal = args[2] ? AbortSignal.any([args[2], active.controller.signal]) : active.controller.signal;
-        try { return await tool.execute(args[0], args[1], signal, args[3], args[4]); }
+        try {
+          const result = await tool.execute(args[0], args[1], signal, args[3], args[4]);
+          // 对外工具结果保留图片；会话内部由共享图片入口保存附件引用。
+          if (result.content.some(part => part.type === "image")) imageToolResults.set(args[0], result);
+          return result;
+        }
         finally { finishAction(active); }
       },
     }));
-    const thinkingLevel = options.thinkingLevel ?? "off";
-    const { runtime } = await createAgentModel(options.providerId, options.modelId, thinkingLevel);
+    const { runtime, effectiveThinkingLevel } = await createAgentModel(options.providerId, options.modelId, options.thinkingLevel);
     active.controller.signal.throwIfAborted();
-    const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } });
+    const settingsManager = SettingsManager.inMemory({
+      compaction: { enabled: false },
+      retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, provider: { maxRetries: 0 } },
+    });
     const agentDir = join(state.cwd, ".agent");
     const systemPrompt = [...new Set([state.systemPrompt || "请根据用户要求完成当前任务，按需使用提供的工具。", ...tools.flatMap(tool => tool.promptGuidelines ?? []), buildResponseLanguagePrompt(getLocale())])].filter(Boolean).join("\n\n");
     const resourceLoader = new DefaultResourceLoader({
@@ -210,9 +222,11 @@ export async function run(options: {
     active.controller.signal.throwIfAborted();
     const { session } = await createAgentSession({
       cwd: state.cwd, agentDir, modelRuntime: runtime, model: runtime.getModel(options.providerId, options.modelId),
-      thinkingLevel, sessionManager: state.history, settingsManager, resourceLoader,
+      thinkingLevel: effectiveThinkingLevel, sessionManager: state.history, settingsManager, resourceLoader,
       tools: tools.map(tool => tool.name), customTools: tools,
     });
+    let messageIndex = 0;
+    configureAgentRequests(session, undefined, active.controller.signal, replyTo => send({ type: "retry", blockPrefix: `${messageIndex}:`, replyTo }));
     active.session = session;
     active.controller.signal.throwIfAborted();
     const streamFunction = session.agent.streamFunction;
@@ -225,7 +239,6 @@ export async function run(options: {
         return stream;
       } catch (error) { finishAction(active); throw error; }
     };
-    let messageIndex = 0;
     const toolBlocks = new Map<string, string>();
     session.subscribe(event => {
       if (event.type === "message_start" && event.message.role === "assistant") messageIndex++;
@@ -245,14 +258,17 @@ export async function run(options: {
           }
         }
       }
-      if (event.type === "message_end" && event.message.role === "assistant") event.message.content.forEach((part, index) => {
-        const blockId = `${messageIndex}:${index}`;
-        if (part.type === "text" || part.type === "thinking") send({ type: part.type, blockId, content: part.type === "text" ? part.text : part.thinking, done: true });
-        if (part.type === "toolCall") {
-          toolBlocks.set(part.id, blockId);
-          send({ type: "tool", blockId, tool: { id: part.id, name: part.name, args: part.arguments, status: "running" } });
-        }
-      });
+      if (event.type === "message_end" && event.message.role === "assistant") {
+        const toolStatus = event.message.stopReason === "error" || event.message.stopReason === "aborted" ? "interrupted" : "running";
+        event.message.content.forEach((part, index) => {
+          const blockId = `${messageIndex}:${index}`;
+          if (part.type === "text" || part.type === "thinking") send({ type: part.type, blockId, content: part.type === "text" ? part.text : part.thinking, done: true });
+          if (part.type === "toolCall") {
+            toolBlocks.set(part.id, blockId);
+            send({ type: "tool", blockId, tool: { id: part.id, name: part.name, args: part.arguments, status: toolStatus } });
+          }
+        });
+      }
       if (event.type === "tool_execution_start" || event.type === "tool_execution_end" || event.type === "tool_execution_update") {
         const result = event.type === "tool_execution_end" ? event.result : event.type === "tool_execution_update" ? event.partialResult : undefined;
         send({ type: "tool", blockId: toolBlocks.get(event.toolCallId) ?? event.toolCallId, tool: {
@@ -260,7 +276,8 @@ export async function run(options: {
           ...(event.type === "tool_execution_start" ? { args: event.args } : { result: getToolResultText(result!.content) }),
         } });
         if (event.type === "tool_execution_end") {
-          const result = { id: event.toolCallId, name: event.toolName, result: event.result };
+          const result = { id: event.toolCallId, name: event.toolName, result: event.isError ? event.result : imageToolResults.get(event.toolCallId) ?? event.result };
+          imageToolResults.delete(event.toolCallId);
           toolResults.push(result);
           send({ type: "toolResult", ...result });
         }
@@ -355,7 +372,11 @@ export async function close(sessionId: string) {
     try {
       try { await browserRuntime.closeOwner(session.cwd, session.history.getSessionId()); }
       finally { await active?.finished.promise; }
-    } finally { sessions.delete(sessionId); }
+    } finally {
+      sessions.delete(sessionId);
+      // 仅清理 create 分配的私有目录，用户提供的工作区由用户管理。
+      if (!session.workspaceAvailable) await rm(join(dirname(conf.path), "singleAgent", session.id), { recursive: true, force: true });
+    }
   })();
   return session.closing;
 }

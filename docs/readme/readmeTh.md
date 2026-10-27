@@ -90,14 +90,36 @@
 </p>
 <p align="center">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/TypeScript/typescript2.svg" alt="TypeScript" height="28" />&nbsp;
-  <img src="https://img.shields.io/badge/Bun-1.3.14-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.3.14" />&nbsp;
+  <img src="https://img.shields.io/badge/Bun-1.4.3-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.4.3" />&nbsp;
   <img src="https://img.shields.io/badge/Vue-3-42B883?style=for-the-badge&logo=vuedotjs&logoColor=white" alt="Vue 3" />&nbsp;
   <img src="https://img.shields.io/badge/Desktop-Electrobun-8257E5?style=for-the-badge" alt="Electrobun" />
 </p>
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift" width="250" height="55" />
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Day" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=Vue" alt="HBAI-Ltd/Toonflow-app | Trendshift Vue Repository Of The Day" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift TypeScript Repository Of The Day" width="250" height="55" />
+  </a>
+</p>
+<p align="center">
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=Vue" alt="HBAI-Ltd/Toonflow-app | Trendshift Vue Repository Of The Week" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Week" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift TypeScript Repository Of The Week" width="250" height="55" />
+  </a>
+</p>
+<p align="center">
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/monthly?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Month" width="250" height="55" />
   </a>
 </p>
 
@@ -277,7 +299,7 @@ sudo spctl --master-disable
 
 ### 4.2 การติดตั้งด้วย Docker
 
-ติดตั้ง Git, [Docker Engine](https://docs.docker.com/engine/install/) และ Docker Compose ก่อน สำหรับ Windows / macOS สามารถใช้ Docker Desktop ในโหมดคอนเทนเนอร์ Linux ได้ ที่เก็บโค้ดมี [Dockerfile](../../Dockerfile), [การกำหนดค่า Compose](../../compose.yaml) และ[กฎยกเว้นไฟล์สำหรับการบิลด์](../../.dockerignore) โดยบิลด์ด้วย Bun 1.3.14 และมี FFmpeg รวมอยู่ในอิมเมจ
+ติดตั้ง Git, [Docker Engine](https://docs.docker.com/engine/install/) และ Docker Compose ก่อน สำหรับ Windows / macOS สามารถใช้ Docker Desktop ในโหมดคอนเทนเนอร์ Linux ได้ ที่เก็บโค้ดมี [Dockerfile](../../Dockerfile), [การกำหนดค่า Compose](../../compose.yaml) และ[กฎยกเว้นไฟล์สำหรับการบิลด์](../../.dockerignore) โดยบิลด์ด้วย Bun 1.4.3 และมี FFmpeg รวมอยู่ในอิมเมจ
 
 <details>
 <summary><strong>แสดงขั้นตอนการติดตั้งด้วย Docker</strong></summary>
@@ -321,7 +343,7 @@ docker compose start
 
 ### 4.3 การติดตั้งบนเซิร์ฟเวอร์
 
-สำหรับการรัน Web และ Server บนเซิร์ฟเวอร์ Linux โดยตรง ตัวอย่างต่อไปนี้ใช้ Ubuntu / Debian และ [Bun 1.3.14](https://bun.sh/docs/installation) ตามเวอร์ชันที่โครงการกำหนด
+สำหรับการรัน Web และ Server บนเซิร์ฟเวอร์ Linux โดยตรง ตัวอย่างต่อไปนี้ใช้ Ubuntu / Debian และ [Bun 1.4.3](https://bun.sh/docs/installation) ตามเวอร์ชันที่โครงการกำหนด
 
 <details>
 <summary><strong>แสดงขั้นตอนการติดตั้งบนเซิร์ฟเวอร์</strong></summary>
@@ -331,7 +353,7 @@ docker compose start
 ```sh
 sudo apt-get update
 sudo apt-get install -y git curl unzip ffmpeg
-curl -fsSL https://bun.com/install | bash -s "bun-v1.3.14"
+curl -fsSL https://bun.com/install | bash -s "bun-v1.4.3"
 export PATH="$HOME/.bun/bin:$PATH"
 bun --version
 ```

@@ -1,7 +1,7 @@
 import { lstat, readFile } from "@toonflow/file";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
-import { t, translateMessage } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 import conf from "@/utils/conf";
 import { configFields, configRulesSchema, declaredConfig, validateNodeConfig } from "@/utils/plugins/nodes";
 
@@ -46,7 +46,7 @@ export async function readExt(name: string) {
   if (!file.isFile()) throw Object.assign(new Error("文件扩展必须是普通文件"), { status: 400 });
   if (file.size > 20 * 1024 * 1024) throw Object.assign(new Error("文件扩展不能超过 20 MB"), { status: 413 });
   const source = await readFile(path, "utf8");
-  return { ...parseExt(source, name), revision: Bun.hash(source).toString(16) };
+  return { ...parseExt(source, name), revision: Bun.hash(source).toString(16), installedAt: conf.get("pluginInstalledAt", {})[`ext:${name}`] ?? file.mtimeMs };
 }
 
 export function getExtConfig(extension: { name: string; configRules: z.infer<typeof configRulesSchema> }) {
@@ -60,7 +60,7 @@ export function validateExtConfig(rules: z.infer<typeof configRulesSchema>, conf
     if (typeof rule.field !== "string" || !Object.hasOwn(parsed, rule.field)) continue;
     const value = parsed[rule.field];
     const props = rule.props && typeof rule.props === "object" && !Array.isArray(rule.props) ? rule.props : {};
-    const label = translateMessage(typeof rule.title === "string" && rule.title.trim() ? rule.title : rule.field);
+    const label = typeof rule.title === "string" && rule.title.trim() ? rule.title : rule.field;
     let message = "";
     if (rule.type === "inputNumber") {
       if (typeof value !== "number" || !Number.isFinite(value)) message = t`${label}必须为数字`;

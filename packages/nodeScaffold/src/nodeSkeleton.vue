@@ -1,8 +1,9 @@
 <template>
   <div v-if="documentTarget" class="nodeDocumentPlaceholder" :style="canvasSize" aria-hidden="true" />
   <teleport :to="documentTarget ?? 'body'" :disabled="!documentTarget">
-  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget }" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="documentTarget && openMenu($event)">
+  <div ref="skeletonElement" v-bind="$attrs" class="nodeSkeleton" :class="{ documentNode: documentTarget, resized: !!resizedStyle.height, resizing: !!resize }" :style="resizedStyle" @wheel.capture="zoomCanvas" @dblclick.stop="focusNode" @contextmenu="documentTarget && openMenu($event)">
     <el-dropdown
+      v-if="!readOnly"
       ref="menu"
       trigger="contextmenu"
       virtualTriggering
@@ -25,7 +26,7 @@
       </template>
     </el-dropdown>
     <div
-      v-if="documentTarget || (topVisible && slotsVisible)"
+      v-if="!readOnly && (documentTarget || (topVisible && slotsVisible))"
       class="floatingSlot topSlot nodrag nopan nowheel"
       :style="{ width: typeof topWidth === 'number' ? `${topWidth}px` : topWidth }"
       @pointerdown.stop
@@ -70,7 +71,7 @@
       </slot>
     </div>
     <div
-      v-if="$slots.bottom && (documentTarget || (bottomVisible && slotsVisible))"
+      v-if="!readOnly && $slots.bottom && (documentTarget || (bottomVisible && slotsVisible))"
       class="floatingSlot bottomSlot nodrag nopan nowheel"
       :style="{ width: typeof bottomWidth === 'number' ? `${bottomWidth}px` : bottomWidth }"
       @pointerdown.stop
@@ -83,7 +84,7 @@
     <div v-show="!documentTarget" class="titleBar">
       <component :is="icon ?? IconBox" class="titleIcon" :size="16" aria-hidden="true" />
       <input
-        v-if="editingLabel"
+        v-if="editingLabel && !readOnly"
         ref="labelInput"
         v-model="labelDraft"
         class="labelInput nodrag nopan"
@@ -98,13 +99,13 @@
       <span
         v-else
         class="labelText"
-        tabindex="0"
-        :title="`${label}（双击编辑名称）`"
-        @dblclick.stop="editLabel"
+        :tabindex="readOnly ? undefined : 0"
+        :title="readOnly ? label : `${label}（双击编辑名称）`"
+        @dblclick="!readOnly && ($event.stopPropagation(), editLabel())"
         @keydown.enter.stop.prevent="editLabel">
         {{ label }}
       </span>
-      <div class="nodeActions nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
+      <div v-if="!readOnly" class="nodeActions nodrag nopan" @pointerdown.stop @mousedown.stop @dblclick.stop>
         <el-button
           :icon="IconRefresh"
           :loading="loading || reloading"
@@ -113,7 +114,7 @@
           title="刷新节点"
           aria-label="刷新节点"
           @click.stop="reloadNode" />
-        <el-button :icon="IconX" text title="移除节点" aria-label="移除节点" @click.stop="deleteNode" :loading="deleting" />
+        <el-button :icon="IconTrash" text title="移除节点" aria-label="移除节点" @click.stop="deleteNode" :loading="deleting" />
       </div>
     </div>
     <div class="cardContainer">
@@ -142,7 +143,7 @@
             linking: localStartHandle?.id === item.id && localStartHandle.type === group.type,
           }"
           :type="group.type"
-          :connectable="!loading"
+          :connectable="!readOnly && !loading"
           :position="group.position"
           :isValidConnection="validateConnection"
           :data-connection-status="getHandleStatus(item)"
@@ -155,6 +156,20 @@
           <component :is="isHandleConnected(item) ? IconCircleDot : IconCircleDashed" class="handleIcon" :size="18" aria-hidden="true" />
         </handle>
       </template>
+      <button
+        v-if="!readOnly && !loading && !documentTarget"
+        class="resizeCorner nodrag nopan"
+        type="button"
+        aria-label="调整节点大小（方向键微调）"
+        @pointerdown.stop.prevent="startResize"
+        @pointermove.stop="moveResize"
+        @pointerup.stop="finishResize"
+        @pointercancel="finishResize"
+        @lostpointercapture="finishResize"
+        @keydown.stop="resizeWithKeyboard"
+        @mousedown.stop
+        @click.stop
+        @dblclick.stop />
     </div>
   </div>
   </teleport>
@@ -165,7 +180,6 @@ import { computed, inject, nextTick, onScopeDispose, ref, shallowRef, watch, wat
 import { Handle, Position, getTransformForBounds, pointToRendererPoint, useNode, useVueFlow, wheelDelta } from "@vue-flow/core";
 import {
   IconRefresh,
-  IconX,
   IconTrash,
   IconCopy,
   IconCopyPlus,
@@ -196,6 +210,7 @@ const props = withDefaults(
     NodeData & {
       icon?: Component;
       loading?: boolean;
+      readOnly?: boolean;
       previewReady?: boolean;
       topWidth?: string | number;
       bottomWidth?: string | number;
@@ -209,6 +224,7 @@ const props = withDefaults(
     handles: () => [],
     outputs: () => ({}),
     previewReady: true,
+    readOnly: false,
     fullscreenVisible: true,
     topWidth: "20vw",
     bottomWidth: "20vw",
@@ -221,11 +237,12 @@ const handleGroups = computed(() => [
 const cardHeight = computed(() => Math.max(100, ...handleGroups.value.map((group) => (group.items.length + 1) * 44)));
 const { id: nodeId, node } = useNode();
 const documentContext = inject<NodeDocumentContext | undefined>("nodeDocument", undefined);
-const documentTarget = computed(() => documentContext?.targets.get(nodeId));
+const documentTarget = computed(() => props.readOnly ? undefined : documentContext?.targets.get(nodeId));
 const skeletonElement = ref<HTMLElement>();
 const canvasSize = shallowRef<{ width: string; height: string }>();
 let documentLease: symbol | undefined;
 function mountDocument(target: HTMLElement) {
+  if (props.readOnly) throw new Error("只读节点不能挂载到工作区文档");
   const element = skeletonElement.value;
   if (!documentContext || !element || !target.isConnected) throw new Error("节点视图尚未就绪");
   if (!documentTarget.value) canvasSize.value = {
@@ -246,6 +263,7 @@ function mountDocument(target: HTMLElement) {
   };
 }
 watch(() => props.loading, loading => {
+  if (props.readOnly) return;
   if (loading) {
     if (documentContext?.mounts.get(nodeId) === mountDocument) documentContext.mounts.delete(nodeId);
   } else documentContext?.mounts.set(nodeId, mountDocument);
@@ -256,9 +274,9 @@ onScopeDispose(() => {
   documentContext.mounts.delete(nodeId);
   documentContext.targets.delete(nodeId);
 });
-const selectionConnection = inject<ShallowRef<NodeConnectionFeedback | undefined>>("selectionConnection");
+const selectionConnection = inject<ShallowRef<NodeConnectionFeedback | undefined> | undefined>("selectionConnection", undefined);
 const nodeEvent = useNodeEvent();
-node.isValidTargetPos = (...args) => nodeEvent.emit("canConnect", ...args);
+if (!props.readOnly) node.isValidTargetPos = (...args) => !props.readOnly && nodeEvent.emit("canConnect", ...args);
 const {
   d3Zoom,
   d3Selection,
@@ -280,6 +298,7 @@ const {
   removeNodes,
   removeEdges,
   updateNodeInternals,
+  screenToFlowCoordinate,
   connectionLookup,
   connectionStartHandle,
   connectionEndHandle,
@@ -294,6 +313,78 @@ const {
   onNodeClick,
   onSelectionStart,
 } = useVueFlow();
+const batchHistory = inject<((action: () => Promise<void>) => Promise<void>) | undefined>("batchCanvasHistory", undefined);
+const resizedStyle = computed(() => {
+  const style = typeof node.style === "function" ? node.style(node) : node.style;
+  return props.readOnly || documentTarget.value ? {} : {
+    ...(style?.width ? { width: style.width } : {}),
+    ...(style?.height ? { height: style.height } : {}),
+  };
+});
+const resize = shallowRef<{
+  element: HTMLElement;
+  pointerId: number;
+  point: { x: number; y: number };
+  width: number;
+  height: number;
+  resolve: () => void;
+}>();
+
+function startResize(event: PointerEvent) {
+  if (props.readOnly || props.loading || documentTarget.value || event.button !== 0 || resize.value) return;
+  const element = event.currentTarget as HTMLElement;
+  const skeleton = skeletonElement.value;
+  if (!skeleton) return;
+  const action = () => new Promise<void>(resolve => {
+    resize.value = {
+      element, pointerId: event.pointerId,
+      point: screenToFlowCoordinate({ x: event.clientX, y: event.clientY }),
+      width: skeleton.offsetWidth, height: skeleton.offsetHeight, resolve,
+    };
+    node.resizing = true;
+    element.setPointerCapture(event.pointerId);
+  });
+  void (batchHistory ? batchHistory(action) : action()).catch(error => {
+    finishResize();
+    ElMessage.error(error instanceof Error ? error.message : "节点缩放失败");
+  });
+}
+
+function setNodeSize(width: number, height: number) {
+  const titleHeight = skeletonElement.value?.querySelector<HTMLElement>(".titleBar")?.offsetHeight ?? 32;
+  const style = typeof node.style === "function" ? node.style(node) : node.style;
+  node.style = { ...style, width: `${Math.max(160, width)}px`, height: `${Math.max(cardHeight.value + titleHeight, height)}px` };
+}
+
+function moveResize(event: PointerEvent) {
+  const state = resize.value;
+  if (!state || event.pointerId !== state.pointerId) return;
+  if (props.readOnly || props.loading || documentTarget.value || findNode(nodeId) !== node) return finishResize();
+  const point = screenToFlowCoordinate({ x: event.clientX, y: event.clientY });
+  setNodeSize(state.width + point.x - state.point.x, state.height + point.y - state.point.y);
+}
+
+function finishResize(event?: PointerEvent) {
+  const state = resize.value;
+  if (!state || (event && event.pointerId !== state.pointerId)) return;
+  resize.value = undefined;
+  node.resizing = false;
+  if (state.element.hasPointerCapture(state.pointerId)) state.element.releasePointerCapture(state.pointerId);
+  state.resolve();
+}
+
+function resizeWithKeyboard(event: KeyboardEvent) {
+  if (props.readOnly || props.loading || documentTarget.value || resize.value) return;
+  const skeleton = skeletonElement.value;
+  if (!skeleton || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  const dx = event.key === "ArrowLeft" ? -10 : event.key === "ArrowRight" ? 10 : 0;
+  const dy = event.key === "ArrowUp" ? -10 : event.key === "ArrowDown" ? 10 : 0;
+  setNodeSize(skeleton.offsetWidth + dx, skeleton.offsetHeight + dy);
+}
+
+onScopeDispose(() => finishResize());
+watch(() => [props.readOnly, props.loading, documentTarget.value], () => finishResize());
 const localStartHandle = computed(() => (connectionStartHandle.value?.nodeId === nodeId ? connectionStartHandle.value : undefined));
 const localEndHandle = computed(() => (connectionEndHandle.value?.nodeId === nodeId ? connectionEndHandle.value : undefined));
 const localSelectionConnection = computed(() => (selectionConnection?.value?.nodeId === nodeId ? selectionConnection.value : undefined));
@@ -374,7 +465,7 @@ onNodeContextMenu(({ event, node }) => {
 });
 
 async function reloadNode() {
-  if (!reloadRemoteNode || reloading.value) return;
+  if (props.readOnly || !reloadRemoteNode || reloading.value) return;
   reloading.value = true;
   try {
     await reloadRemoteNode(node.type);
@@ -386,6 +477,7 @@ async function reloadNode() {
 }
 
 async function openMenu(event: MouseEvent | TouchEvent) {
+  if (props.readOnly) return;
   event.preventDefault();
   if (documentTarget.value) event.stopPropagation();
   menu.value?.handleClose();
@@ -397,7 +489,7 @@ async function openMenu(event: MouseEvent | TouchEvent) {
 }
 
 async function deleteNode() {
-  if (deleting.value) return;
+  if (props.readOnly || deleting.value) return;
   deleting.value = true;
   try {
     await nodeEvent.emit("delete");
@@ -425,6 +517,7 @@ const assetOutputs = computed(() =>
 );
 
 async function handleCommand(command: string) {
+  if (props.readOnly) return;
   if (command === "saveAsset") saveNodeToAssets?.(props.label, assetOutputs.value);
   if (command === "clipboard" && copyNodeToClipboard && !copyingToClipboard.value) {
     copyingToClipboard.value = true;
@@ -481,6 +574,7 @@ async function handleCommand(command: string) {
 }
 
 async function editLabel() {
+  if (props.readOnly) return;
   labelDraft.value = props.label;
   editingLabel.value = true;
   await nextTick();
@@ -488,14 +582,14 @@ async function editLabel() {
 }
 
 function saveLabel() {
-  if (!editingLabel.value) return;
+  if (props.readOnly || !editingLabel.value) return;
   const label = labelDraft.value.trim();
   if (label) node.data.label = label;
   editingLabel.value = false;
 }
 
 function confirmLabel(event: KeyboardEvent) {
-  if (event.isComposing) return;
+  if (props.readOnly || event.isComposing) return;
   event.preventDefault();
   saveLabel();
 }
@@ -542,20 +636,20 @@ function getHandleStatus(item: NodeHandle) {
 }
 
 watchEffect(() => {
-  if (props.loading) return;
+  if (props.readOnly || props.loading) return;
   // 仅同步端口快照供跨节点校验；端口状态由具体 node 维护。
   if (JSON.stringify(node.data.handles) !== JSON.stringify(props.handles)) node.data.handles = props.handles.map((item) => ({ ...item }));
 });
 watchEffect(() => {
-  if (props.loading) return;
+  if (props.readOnly || props.loading) return;
   // 输出由 node 持有，画布仅共享当前值；不使用 JSON 比较或触发端口重测。
   node.data.outputs = props.outputs;
 });
 // 比较内容，避免内联数组的新引用触发渲染循环。
 watch(
-  () => JSON.stringify([props.label, props.handles]),
+  () => JSON.stringify([props.label, props.handles, props.readOnly]),
   () => {
-    if (props.loading) return;
+    if (props.readOnly || props.loading) return;
     removeEdges((edges) =>
       edges.filter(
         (edge) =>
@@ -575,6 +669,28 @@ watch(
   width: 220px;
   color: var(--el-text-color-primary);
   text-align: left;
+
+  &.resized {
+    display: flex;
+    flex-direction: column;
+
+    .titleBar { flex-shrink: 0; }
+    .cardContainer {
+      flex: 1;
+      min-height: 0;
+
+      .contentCard {
+        height: 100%;
+        box-sizing: border-box;
+
+        :deep(.el-card__body) {
+          height: 100%;
+          box-sizing: border-box;
+          overflow: auto;
+        }
+      }
+    }
+  }
 
   &.documentNode {
     display: flex;
@@ -604,6 +720,11 @@ watch(
 
   &:hover .titleBar .nodeActions {
     visibility: visible;
+  }
+
+  &:hover,
+  &.resizing {
+    .cardContainer .resizeCorner { opacity: 0.55; }
   }
 
   .floatingSlot {
@@ -688,6 +809,32 @@ watch(
 
   .cardContainer {
     position: relative;
+
+    .resizeCorner {
+      position: absolute;
+      /* 拖柄内侧角轻贴圆角边框，主体留在边框外。 */
+      right: calc(var(--ui-radius-large, var(--el-border-radius-base)) * 0.293 - 2px);
+      bottom: calc(var(--ui-radius-large, var(--el-border-radius-base)) * 0.293 - 2px);
+      transform: translate(50%, 50%);
+      box-sizing: border-box;
+      width: 4px;
+      height: 4px;
+      padding: 0;
+      border: 1px solid var(--el-border-color);
+      border-radius: 1px;
+      background: var(--el-bg-color);
+      opacity: 0;
+      cursor: nwse-resize;
+      touch-action: none;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset: -4px;
+      }
+
+      &:focus-visible { opacity: 1; }
+    }
 
     .contentCard.selected {
       border-color: color-mix(in srgb, var(--el-color-primary) 50%, var(--el-border-color-light));

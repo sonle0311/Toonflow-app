@@ -9,11 +9,17 @@ const rules = [
 ];
 
 const apiUrl = "https://api.toonflow.net/v1";
-const version = "2.0.1";
+const version = "2.0.3";
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("TF-router 响应格式错误");
   return value as Record<string, unknown>;
+}
+
+function balanceAmount(value: unknown) {
+  const amount = typeof value === "string" && value.trim() ? Number(value) : value;
+  if (typeof amount !== "number" || !Number.isFinite(amount)) throw new Error("TF-router 金额响应格式错误");
+  return amount;
 }
 
 async function fetchJson(context: ProviderContext, path: string, body?: unknown, signal = context.signal) {
@@ -43,6 +49,32 @@ function mediaUrl(input: MediaInput) {
   }
   const data = input.type === "binary" ? Buffer.from(input.data).toString("base64") : input.data;
   return data.startsWith("data:") ? data : `data:${input.mimeType};base64,${data}`;
+}
+
+type ReferencedVideoRequest = VideoRequest & {
+  referenceOrder?: ({ type: "image" | "video" | "audio"; index: number } | { type: "firstFrame" | "lastFrame" | "text" })[];
+};
+
+function seedancePrompt(request: ReferencedVideoRequest, mode: VideoMode) {
+  const isFrames = mode === "startEndRequired" || mode === "endFrameOptional" || mode === "startFrameOptional";
+  return request.prompt.replace(/\{\{ref (\d+)\}\}/g, (marker, number: string) => {
+    const reference = request.referenceOrder?.[Number(number) - 1];
+    if (!reference) throw new Error(`引用标记 ${marker} 缺少素材映射，请更新视频节点或提供 referenceOrder`);
+    if (reference.type === "text") return `参考 ${Number(number)}`;
+    if (reference.type === "firstFrame" || reference.type === "lastFrame") {
+      if (!isFrames || !request[reference.type]) throw new Error(`引用标记 ${marker} 对应的首尾帧未提交`);
+      return `图片${reference.type === "lastFrame" && request.firstFrame ? 2 : 1}`;
+    }
+    if (!("index" in reference)) throw new Error(`引用标记 ${marker} 的素材类型无效`);
+    const media = { image: request.images, video: request.videos, audio: request.audios };
+    const labels = { image: "图片", video: "视频", audio: "音频" };
+    const included = Array.isArray(mode) || (reference.type === "image"
+      && (mode === "singleImage" || (isFrames && !request.firstFrame && !request.lastFrame)));
+    if (!included || !Number.isSafeInteger(reference.index) || reference.index < 0 || !media[reference.type]?.[reference.index]) {
+      throw new Error(`引用标记 ${marker} 对应的素材未提交，请重新选择引用`);
+    }
+    return `${labels[reference.type]}${reference.index + 1}`;
+  });
 }
 
 function audioReference(input: MediaInput, mediaType: "image" | "audio") {
@@ -231,6 +263,31 @@ export default {
       pitchRate: pitch,
     }, mimeTypes[format]);
   },
+  async getPrice(request: ProviderPriceRequest): Promise<ProviderPrice | null> {
+    const result = await fetchJson(this, "price", request);
+    if (result.code !== 200) throw new Error(this.tool.errorMessage(result) || "TF-router 价格查询失败");
+    if (result.data === null) return null;
+    const price = object(result.data);
+    if (typeof price.price === "string" && price.price.trim() && typeof price.tips === "string") return { price: price.price, tips: price.tips };
+    // ACT: 兼容仍返回数值报价的官方接口；统一升级后可移除此分支。
+    const amount = balanceAmount(price.amount);
+    if (amount < 0 || typeof price.unit !== "string" || !price.unit.trim()) throw new Error("TF-router 价格响应格式错误");
+    return { price: `${amount} ${price.unit.trim()}`, tips: "以实际扣费为准" };
+  },
+  async getBalance(): Promise<ProviderBalance> {
+    const result = await fetchJson(this, "balance");
+    if (result.code !== 200) throw new Error(this.tool.errorMessage(result) || "TF-router 余额查询失败");
+    const balance = object(result.data);
+    // ACT: 旧版余额接口以元计价且没有 unit；升级接口返回单位后直接沿用，不换算数值。
+    const unit = balance.unit === undefined ? "元" : balance.unit;
+    if (typeof unit !== "string" || !unit.trim()) throw new Error("TF-router 余额单位格式错误");
+    return {
+      balance: balanceAmount(balance.balance), unit: unit.trim(),
+      ...(balance.keyBalance === undefined ? {} : { keyBalance: balance.keyBalance === null ? null : balanceAmount(balance.keyBalance) }),
+      ...(balance.totalConsumption === undefined ? {} : { totalConsumption: balanceAmount(balance.totalConsumption) }),
+      ...(balance.totalRecharge === undefined ? {} : { totalRecharge: balanceAmount(balance.totalRecharge) }),
+    };
+  },
   async generateImage(request: ImageRequest): Promise<MediaAsset[]> {
     const model = request.model.toLowerCase();
     const images = (request.images ?? []).map(mediaUrl);
@@ -259,7 +316,7 @@ export default {
       metadata,
     });
   },
-  async generateVideo(request: VideoRequest): Promise<MediaAsset[]> {
+  async generateVideo(request: ReferencedVideoRequest): Promise<MediaAsset[]> {
     const model = request.model.toLowerCase();
     const images = (request.images ?? []).map(mediaUrl);
     const videos = (request.videos ?? []).map(mediaUrl);
@@ -317,7 +374,7 @@ export default {
     }
     return generateTask(this, "video", {
       model: request.model,
-      prompt: request.prompt,
+      prompt: model.includes("seedance") ? seedancePrompt(request, mode) : request.prompt,
       duration: request.duration,
       resolution: request.resolution,
       metadata,

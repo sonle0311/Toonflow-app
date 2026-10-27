@@ -2,6 +2,7 @@
   <component v-if="renderer" :is="renderer" :tool="tool" :directory="directory" :toolSessionId="toolSessionId" v-bind="tool.name === 'askUser' ? { translateMessage: translate } : {}" @copy="emit('copy', $event)" />
   <el-text v-if="rendererError" type="danger">工具界面加载失败，请停止后重试：{{ rendererError }}</el-text>
   <chat-reasoning v-model:collapsed="collapsed" class="messageReasoning toolCall" expandIconPlacement="left">
+    <template #expandIcon><component :is="collapsed ? IconChevronRight : IconChevronDown" :size="14" aria-hidden="true" /></template>
     <template #header>
       <span class="toolHeader" :data-status="tool.status">
         <icon-tool :size="14" />
@@ -26,8 +27,8 @@
 
 <script setup lang="ts">
 import { computed, onErrorCaptured, ref, shallowRef, watch, type Component } from "vue";
-import { loadToolComponent } from "@toonflow/tools-scaffold/client";
-import { IconCopy, IconTool } from "@tabler/icons-vue";
+import { getCachedToolComponent, loadToolComponent } from "@toonflow/tools-scaffold/client";
+import { IconChevronDown, IconChevronRight, IconCopy, IconTool } from "@tabler/icons-vue";
 import chatReasoning from "@tdesign-vue-next/chat/es/chat-reasoning";
 import type { AgentToolCall } from "@toonflow/server/agent/types";
 import messageMarkdown from "@/components/messageMarkdown.vue";
@@ -37,20 +38,25 @@ const { tool, directory, toolSessionId } = defineProps<{ tool: AgentToolCall; di
 const emit = defineEmits<{ copy: [content: string] }>();
 const renderer = shallowRef<Component>();
 const rendererError = ref("");
-watch(() => [tool.name, tool.question?.callId] as const, async ([name], _previous, onCleanup) => {
+watch(() => [tool.name, tool.question?.callId] as const, async ([name], previous, onCleanup) => {
   let active = true;
   onCleanup(() => { active = false; });
-  renderer.value = undefined;
+  if (name !== previous?.[0]) renderer.value = name === "subAgent" ? undefined : getCachedToolComponent(name);
   rendererError.value = "";
   if (name === "subAgent") return;
+  const initialRenderer = renderer.value;
   try {
     const component = await loadToolComponent(name);
-    if (active) {
+    if (active && (!rendererError.value || component !== initialRenderer)) {
       renderer.value = component;
+      rendererError.value = "";
       if (!component && tool.status === "running" && tool.question?.callId) rendererError.value = "该工具未提供可用的交互组件";
     }
   } catch (error) {
-    if (active) rendererError.value = error instanceof Error ? error.message : String(error);
+    if (active) {
+      renderer.value = undefined;
+      rendererError.value = error instanceof Error ? error.message : String(error);
+    }
   }
 }, { immediate: true });
 onErrorCaptured(error => {
@@ -80,6 +86,7 @@ function formatToolData(value: unknown) {
 <style scoped lang="scss">
 .toolCall {
   min-width: 0;
+  :deep(.t-collapse-panel__icon) { color: var(--el-text-color-secondary); }
 
   .toolHeader {
     display: flex;

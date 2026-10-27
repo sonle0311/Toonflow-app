@@ -27,7 +27,7 @@
                 <div v-for="(item, index) in references" :key="item.url" class="referenceItem">
                   <el-image v-if="item.file.type.startsWith('image/')" :src="item.url" fit="cover" :previewSrcList="[item.url]" previewTeleported />
                   <video v-else-if="item.file.type.startsWith('video/')" :src="item.url" muted preload="metadata" />
-                  <icon-volume v-else :size="22" aria-hidden="true" />
+                  <icon-music v-else :size="22" aria-hidden="true" />
                   <el-button class="removeReference" circle size="small" :icon="IconX" :disabled="busy" :aria-label="`移除 ${item.file.name}`" @click="removeReference(index)" />
                   <el-select v-if="activeModel?.type === 'video' && item.file.type.startsWith('image/')" v-model="item.role" size="small" aria-label="参考图用途">
                     <el-option label="参考图" value="images" /><el-option label="首帧" value="firstFrame" /><el-option label="尾帧" value="lastFrame" />
@@ -120,9 +120,10 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue
 import axios from "axios";
 import formCreate, { type Api, type Options, type Rule } from "../../formCreate";
 import { ElMessage } from "element-plus";
-import { IconFolderOpen, IconRefresh, IconPlus, IconX, IconVolume, IconDownload, IconPlayerPlay, IconPlayerStop } from "@tabler/icons-vue";
+import { IconFolderOpen, IconRefresh, IconPlus, IconX, IconMusic, IconDownload, IconPlayerPlay, IconPlayerStop } from "@tabler/icons-vue";
 import type { Provider } from "@toonflow/providers";
 import { invalidateNodeModels } from "@toonflow/nodes-scaffold/nodeAi";
+import { actualPlatform } from "@/lib/platform";
 
 type DebugProvider = { id: string; label: string; rules: Rule[]; models: Provider["models"] };
 type DebugLog = { id: number; method: string; url: string; state: string; status?: number; duration?: number; request?: string; response?: string; error?: string };
@@ -171,7 +172,6 @@ const statusLabel = computed(() => ({
   "已停止": translate("已停止"),
 })[status.value]);
 const elapsed = ref(0);
-const isDesktop = new URLSearchParams(window.location.search).get("desktop") === "1";
 const desktopHeaders = { "x-toonflow-desktop": "1" };
 let controller: AbortController | undefined;
 
@@ -181,7 +181,7 @@ function showError(error: unknown) {
 }
 
 async function readSource(): Promise<SourceFile> {
-  if (isDesktop) {
+  if (actualPlatform.isDesktop) {
     const { data } = await axios.post<{ data: SourceFile }>("/api/desktop/providerFile/read", { token: desktopToken.value }, { headers: desktopHeaders, signal: controller?.signal });
     return data.data;
   }
@@ -216,7 +216,7 @@ async function selectFile() {
   errorMessage.value = "";
   controller = new AbortController();
   try {
-    if (isDesktop) {
+    if (actualPlatform.isDesktop) {
       const { data } = await axios.post<{ data: { token: string; name: string } | null }>("/api/desktop/providerFile/select", {}, { headers: desktopHeaders, signal: controller.signal });
       if (!data.data) return;
       desktopToken.value = data.data.token;

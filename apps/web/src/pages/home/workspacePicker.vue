@@ -1,13 +1,13 @@
 <template>
   <el-button v-if="!hideTrigger" class="workspaceButton" text :icon="IconFolder" :loading="selecting" :disabled="loading || disabled" :title="selectedDirectory || '选择工作目录'" aria-label="选择工作目录" @click="chooseDirectory">
     <span class="directoryName">{{ selectedDirectory ? selectedDirectory.split(/[\\/]/).filter(Boolean).at(-1) || selectedDirectory : '工作目录' }}</span>
-    <icon-chevron-down :size="14" />
+    <component :is="dialogVisible ? IconChevronUp : IconChevronDown" :size="14" aria-hidden="true" />
   </el-button>
-  <el-dialog v-model="dialogVisible" :title="isMobile && !isRemoteMobile ? '选择手机工作目录' : '选择服务器工作目录'" width="min(680px, 92vw)" appendToBody :closeOnClickModal="!editing" :closeOnPressEscape="!editing" :showClose="!editing" @close="finishSelection?.(null)">
+  <el-dialog v-model="dialogVisible" :title="isLocalMobile ? '选择手机工作目录' : '选择服务器工作目录'" width="min(680px, 92vw)" appendToBody :closeOnClickModal="!editing" :closeOnPressEscape="!editing" :showClose="!editing" @close="finishSelection?.(null)">
     <div class="workspaceBrowser">
       <div class="directoryHeader">
         <el-button :icon="IconArrowLeft" circle :disabled="loading || editing || !listing?.path" aria-label="上一级目录" @click="loadDirectory(listing?.parent ?? '')" />
-        <el-text class="directoryPath" truncated :title="listing?.absolutePath">{{ isMobile && !isRemoteMobile ? '手机工作区' : '服务器工作区' }}{{ listing?.path ? ` / ${listing.path}` : '' }}</el-text>
+        <el-text class="directoryPath" truncated :title="listing?.absolutePath">{{ isLocalMobile ? '手机工作区' : '服务器工作区' }}{{ listing?.path ? ` / ${listing.path}` : '' }}</el-text>
         <el-button :icon="IconFolderPlus" :disabled="loading || editing || !listing || !!browseError" @click="manageEntry('mkdir')">新建文件夹</el-button>
       </div>
       <el-alert v-if="browseError" :title="browseError" type="error" :closable="false" />
@@ -15,7 +15,7 @@
         <el-table-column label="名称" minWidth="160">
           <template #default="{ row }">
             <el-button v-if="row.type === 'directory'" class="entryName" link :icon="IconFolder" :title="row.name" :disabled="loading || editing" @click="loadDirectory([listing?.path, row.path].filter(Boolean).join('/'))">{{ row.name }}</el-button>
-            <span v-else class="fileName" :title="row.name"><icon-file :size="16" /><span>{{ row.name }}</span></span>
+            <span v-else class="fileName" :title="row.name"><icon-file :size="18" aria-hidden="true" /><span>{{ row.name }}</span></span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="130" align="right">
@@ -35,11 +35,12 @@
 
 <script setup lang="ts">
 import axios from "axios";
+import { translate } from "@toonflow/i18n/vue";
 import { onBeforeUnmount, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { IconFolder, IconFolderPlus, IconFile, IconChevronDown, IconArrowLeft } from "@tabler/icons-vue";
+import { IconFolder, IconFolderPlus, IconFile, IconChevronDown, IconChevronUp, IconArrowLeft } from "@tabler/icons-vue";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
-import { isMobile, isRemoteMobile, isRemoteConnection } from "@/lib/mobile";
+import { actualPlatform, isLocalMobile } from "@/lib/platform";
 
 type WorkspaceEntry = { name: string; path: string; type: "file" | "directory" };
 type DirectoryListing = {
@@ -51,7 +52,6 @@ type DirectoryListing = {
 
 const selectedDirectory = defineModel<string>({ default: "" });
 const props = defineProps<{ disabled?: boolean; hideTrigger?: boolean }>();
-const isDesktop = new URLSearchParams(window.location.search).get("desktop") === "1";
 const dialogVisible = ref(false);
 const selecting = ref(false);
 const loading = ref(false);
@@ -60,13 +60,13 @@ const listing = ref<DirectoryListing>();
 const browseError = ref("");
 let finishSelection: ((directory: string | null) => void) | undefined;
 onBeforeUnmount(() => finishSelection?.(null));
-defineExpose({ chooseDirectory });
+defineExpose({ chooseDirectory, selecting });
 
 async function chooseDirectory(): Promise<string | null> {
   if (selecting.value || loading.value || props.disabled) return null;
   selecting.value = true;
   try {
-    if (isDesktop && !isRemoteConnection) {
+    if (actualPlatform.isLocalDesktop) {
       const { data } = await axios.post<{ data: { directory: string | null } }>("/api/desktop/selectDirectory", null, { headers: { "x-toonflow-desktop": "1" } });
       if (data.data.directory) selectedDirectory.value = data.data.directory;
       return data.data.directory;
@@ -120,7 +120,7 @@ async function manageEntry(action: "mkdir" | "rename" | "remove", entry?: Worksp
         inputValue: entry?.name ?? "新建文件夹",
         inputValidator: value => {
           const name = value?.trim();
-          return !!name && name !== "." && name !== ".." && !/[\\/:*?"<>|\u0000-\u001f]/.test(name) || "请输入有效的单个文件或文件夹名称";
+          return !!name && name !== "." && name !== ".." && !/[\\/:*?"<>|\u0000-\u001f]/.test(name) || translate("请输入有效的单个文件或文件夹名称");
         },
         confirmButtonText: action === "mkdir" ? "创建" : "保存", cancelButtonText: "取消",
       });
@@ -174,6 +174,8 @@ function confirmDirectory() {
 
   .entryName {
     max-width: 100%;
+    color: var(--el-text-color-regular);
+    :deep(.el-icon) { font-size: 18px; color: var(--el-text-color-secondary); }
     :deep(> span) { overflow: hidden; text-overflow: ellipsis; }
   }
 
@@ -181,7 +183,7 @@ function confirmDirectory() {
     display: flex;
     align-items: center;
     gap: 6px;
-    svg { flex-shrink: 0; }
+    svg { flex-shrink: 0; color: var(--el-text-color-secondary); }
     span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   }
 }

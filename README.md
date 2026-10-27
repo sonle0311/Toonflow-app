@@ -48,6 +48,8 @@
   <img src="./docs/images/logo.png" alt="Toonflow Logo" width="120" height="120" />
 </p>
 
+<h1 align="center">Toonflow｜开源 AI 短剧、漫剧与视频创作平台</h1>
+
 <a href="https://git.io/typing-svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://readme-typing-svg.demolab.com?font=Fira+Code&size=40&duration=3000&pause=1000&color=FFFFFF&center=true&vCenter=true&width=600&lines=Toonflow;AI%E7%9F%AD%E5%89%A7%E5%B7%A5%E5%8E%82;%E8%AE%A9%E7%81%B5%E6%84%9F%E6%88%90%E4%B8%BA%E7%9C%8B%E5%BE%97%E8%A7%81%E7%9A%84%E6%95%85%E4%BA%8B" />
@@ -90,20 +92,40 @@
 </p>
 <p align="center">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/TypeScript/typescript2.svg" alt="TypeScript" height="28" />&nbsp;
-  <img src="https://img.shields.io/badge/Bun-1.3.14-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.3.14" />&nbsp;
+  <img src="https://img.shields.io/badge/Bun-1.4.3-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.4.3" />&nbsp;
   <img src="https://img.shields.io/badge/Vue-3-42B883?style=for-the-badge&logo=vuedotjs&logoColor=white" alt="Vue 3" />&nbsp;
   <img src="https://img.shields.io/badge/Desktop-Electrobun-8257E5?style=for-the-badge" alt="Electrobun" />
 </p>
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift" width="250" height="55" />
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Day" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=Vue" alt="HBAI-Ltd/Toonflow-app | Trendshift Vue Repository Of The Day" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift TypeScript Repository Of The Day" width="250" height="55" />
+  </a>
+</p>
+<p align="center">
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=Vue" alt="HBAI-Ltd/Toonflow-app | Trendshift Vue Repository Of The Week" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Week" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift TypeScript Repository Of The Week" width="250" height="55" />
+  </a>
+</p>
+<p align="center">
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/monthly?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Month" width="250" height="55" />
   </a>
 </p>
 
-**开源 AI 短剧漫剧视频创作平台**
-
-> 🚀 **一站式短剧创作**：集成剧本创作、资产管理、图像与视频生成，在无限画布中组织完整的创作流程。
+Toonflow 是面向短剧、漫剧和短视频创作者的开源 AI 创作工具。通过无限画布编写剧本与分镜、管理角色和场景素材、生成图片与视频。支持本地部署、自由接入模型，并可通过 AI Agent、MCP 与插件扩展创作流程。
 
 </div>
 
@@ -192,6 +214,29 @@ Toonflow 是面向短剧、漫剧与短视频制作的开源 AI 创作平台，�
 | 🔧 **自由接入模型** | 配置第三方 API，也可接入本地 ComfyUI 和 LLM。 |
 | 🌐 **多语言支持** | 支持 21 种界面语言。 |
 
+### 如何用 Toonflow 制作 AI 短剧与漫剧
+
+1. **编写剧本与分镜**：在文本节点中整理故事、人物设定和镜头描述，使用语言模型辅助创作，再审阅与修改内容。
+2. **准备角色与场景素材**：导入参考图片，或通过图片生成节点制作角色、场景和分镜图。
+3. **生成视频镜头**：连接文本与图片参考，选择视频模型和生成模式，按镜头生成视频片段。
+4. **预览、整理与下载**：在无限画布中预览和组织图片、视频片段，下载素材后按创作需求继续处理。
+
+支持的参考素材、视频时长、分辨率和音频能力取决于所选模型与供应商。
+
+### 常见问题
+
+**Toonflow 可以用于哪些 AI 短剧和漫剧制作环节？**
+
+Toonflow 提供文本、图片与视频生成节点，可用于剧本与分镜创作、角色和场景素材制作、视频镜头生成，以及素材的预览与整理。创作者需要审阅和调整内容，具体生成能力取决于配置的模型。
+
+**Toonflow 免费吗？模型调用需要付费吗？**
+
+Toonflow 采用 MIT 开源许可，可自行部署。第三方模型服务的 API 调用可能收费；使用本地模型或 ComfyUI 时，需要自行准备相应的运行环境与算力。作品示例中的制作费用仅代表该案例，不是固定价格。
+
+**可以接入自己的模型和 ComfyUI 工作流吗？**
+
+可以配置语言模型与媒体模型服务，也可通过自定义供应商适配接入已有的 ComfyUI 工作流。具体接入方式取决于服务 API、模型与工作流，可参考[使用教程](https://qcn7xdsqgc4z.feishu.cn/docx/RXFqdgR2Xo0dXZxGfd0cZCGgnwf)与[开发者文档](https://qcn7xdsqgc4z.feishu.cn/docx/KNBNd9naqolsy6xjAOCcEAkqnRd)。
+
 <a id="languages"></a>
 
 ### 多语言支持
@@ -279,7 +324,7 @@ sudo spctl --master-disable
 
 ### 4.2 Docker 安装
 
-先安装 Git、[Docker Engine](https://docs.docker.com/engine/install/) 和 Docker Compose；Windows / macOS 可使用 Docker Desktop 的 Linux 容器模式。仓库提供 [Dockerfile](./Dockerfile)、[Compose 配置](./compose.yaml) 和 [构建排除规则](./.dockerignore)，基于 Bun 1.3.14 构建，镜像内包含 FFmpeg。
+先安装 Git、[Docker Engine](https://docs.docker.com/engine/install/) 和 Docker Compose；Windows / macOS 可使用 Docker Desktop 的 Linux 容器模式。仓库提供 [Dockerfile](./Dockerfile)、[Compose 配置](./compose.yaml) 和 [构建排除规则](./.dockerignore)，基于 Bun 1.4.3 构建，镜像内包含 FFmpeg。
 
 <details>
 <summary><strong>展开 Docker 安装步骤</strong></summary>
@@ -323,7 +368,7 @@ docker compose start
 
 ### 4.3 服务器安装
 
-适用于直接在 Linux 服务器上运行 Web 与 Server。以下以 Ubuntu / Debian 为例，使用项目指定的 [Bun 1.3.14](https://bun.sh/docs/installation)。
+适用于直接在 Linux 服务器上运行 Web 与 Server。以下以 Ubuntu / Debian 为例，使用项目指定的 [Bun 1.4.3](https://bun.sh/docs/installation)。
 
 <details>
 <summary><strong>展开服务器安装步骤</strong></summary>
@@ -333,7 +378,7 @@ docker compose start
 ```sh
 sudo apt-get update
 sudo apt-get install -y git curl unzip ffmpeg
-curl -fsSL https://bun.com/install | bash -s "bun-v1.3.14"
+curl -fsSL https://bun.com/install | bash -s "bun-v1.4.3"
 export PATH="$HOME/.bun/bin:$PATH"
 bun --version
 ```

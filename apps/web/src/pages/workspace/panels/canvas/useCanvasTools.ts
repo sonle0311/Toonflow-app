@@ -2,6 +2,10 @@ import { nextTick, watch, type Ref } from "vue";
 import { useVueFlow, type XYPosition } from "@vue-flow/core";
 import { useNodeEvent, useNodeToolsContext, validateConnection } from "@toonflow/nodes-scaffold/runtime";
 import { canvasSchemas, type CanvasContext, type CanvasToolCall } from "@toonflow/tool-canvas/runtime";
+import { asrRequestSchema } from "@toonflow/tools-scaffold/runtime";
+import { isBrowserAudioAsrSupported, transcribeBrowserAudio } from "@toonflow/asr";
+import useWorkspaceFiles from "@/lib/workspaceFiles";
+import { useWorkspaceStore } from "@/stores/workspace";
 import { arrangeCanvas } from "./arrangeCanvas";
 import { canvasEdgeSummary, canvasNodeSummary, createCanvasQueries, isCanvasRead } from "./canvasQueries";
 
@@ -9,7 +13,8 @@ export function useCanvasTools(options: {
   availableNodes: Ref<{ type: string; label: string }[]>;
   flushSave(): Promise<void>;
   menu(): {
-    getCanvases(): { id: string; name: string }[];
+    getCanvases(signal?: AbortSignal): Promise<{ id: string; name: string }[]>;
+    peekCanvases(): { id: string; name: string }[];
     addCanvas(name?: string, signal?: AbortSignal): Promise<string>;
     switchCanvas(canvasId: string, signal?: AbortSignal): Promise<void>;
     renameCanvas(canvasId: string, name: string, signal?: AbortSignal): Promise<void>;
@@ -18,6 +23,7 @@ export function useCanvasTools(options: {
   resolveCanvasContext?(id: string): CanvasContext | undefined;
 }) {
   const flow = useVueFlow();
+  const workspaceStore = useWorkspaceStore();
   const getNodeTools = useNodeToolsContext();
   let nodeRevision = 0;
   let edgeRevision = 0;
@@ -32,7 +38,7 @@ export function useCanvasTools(options: {
     selectedCount: () => flow.getSelectedNodes.value.length,
     nodeRevision: () => nodeRevision,
     edgeRevision: () => edgeRevision,
-    canvases: () => options.menu().getCanvases(),
+    canvases: signal => options.menu().getCanvases(signal),
     nodeTypes: () => options.availableNodes.value,
     nodeTools: getNodeTools,
   });
@@ -68,13 +74,14 @@ export function useCanvasTools(options: {
       },
       async call(request, signal) {
         if (redirected) return redirected.call(request, signal);
-        canvasSignal.throwIfAborted();
-        id = options.getCanvasBinding().id;
         const changesCanvas = request.name === "addCanvas" || request.name === "switchCanvas" || request.name === "renameCanvas";
-        const callSignal = AbortSignal.any([workspaceSignal, ...(changesCanvas ? [] : [canvasSignal]), AbortSignal.timeout(120000), ...(signal ? [signal] : [])]);
-        callSignal.throwIfAborted();
+        // ACT: 转写按音频时长运行，复用 ASR 的停滞与收尾超时，不套用画布操作的总时限。
+        const callSignal = AbortSignal.any([workspaceSignal, ...(changesCanvas ? [] : [canvasSignal]), ...(request.name === "transcribeAudio" ? [] : [AbortSignal.timeout(120000)]), ...(signal ? [signal] : [])]);
         let cancel = () => {};
         try {
+          canvasSignal.throwIfAborted();
+          id = options.getCanvasBinding().id;
+          callSignal.throwIfAborted();
           return await Promise.race([
             Promise.resolve().then(async () => {
               canvasSignal.throwIfAborted();
@@ -87,13 +94,13 @@ export function useCanvasTools(options: {
                   return nextContext.call({ name: "getCanvas", args: {} }, callSignal);
                 }
                 const binding = options.getCanvasBinding();
-                if (binding.id !== result) throw new Error("画布已再次切换，请重新发送消息");
-                binding.signal.throwIfAborted();
+                if (binding.id !== result) throw Object.assign(new Error("画布已再次切换，请重新发送消息"), { code: "CANVAS_UNAVAILABLE" });
                 id = binding.id;
                 canvasSignal = binding.signal;
+                canvasSignal.throwIfAborted();
                 result = await execute({ name: "getCanvas", args: {} }, callSignal, id);
               }
-              if (!isCanvasRead(request.name) && request.name !== "selectNodes") await options.flushSave();
+              if (!isCanvasRead(request.name) && request.name !== "selectNodes" && request.name !== "transcribeAudio") await options.flushSave();
               callSignal.throwIfAborted();
               canvasSignal.throwIfAborted();
               return result;
@@ -103,6 +110,12 @@ export function useCanvasTools(options: {
               callSignal.addEventListener("abort", cancel, { once: true });
             }),
           ]);
+        } catch (error) {
+          if (signal?.aborted) throw signal.reason;
+          if (canvasSignal.aborted || workspaceSignal.aborted || callSignal.aborted) {
+            throw Object.assign(new Error(error instanceof Error ? error.message : "画布已不可用，请重新发送消息"), { code: "CANVAS_UNAVAILABLE" });
+          }
+          throw error;
         } finally {
           callSignal.removeEventListener("abort", cancel);
         }
@@ -112,12 +125,28 @@ export function useCanvasTools(options: {
 
   async function execute(request: CanvasToolCall, signal: AbortSignal, canvasId: string): Promise<unknown> {
     signal.throwIfAborted();
+    if (!canvasId && !["getCanvas", "addCanvas", "switchCanvas"].includes(request.name)) throw new Error("请先选择画布");
     if (isCanvasRead(request.name)) {
       await nextTick();
       signal.throwIfAborted();
       return readCanvas(request, canvasId, signal);
     }
     switch (request.name) {
+      case "transcribeAudio": {
+        const { path, lang } = asrRequestSchema.parse(request.args);
+        if (!isBrowserAudioAsrSupported()) throw new Error("当前浏览器或 WebView 不支持音频文件语音识别");
+        const directory = workspaceStore.project?.directory;
+        if (!directory) throw new Error("请先选择工作目录");
+        const content = await useWorkspaceFiles(directory).read(path);
+        signal.throwIfAborted();
+        if (!content.byteLength || content.byteLength > 100 * 1024 * 1024) throw new Error("音频不能为空且不能超过 100 MB");
+        const url = URL.createObjectURL(new Blob([content]));
+        try {
+          return await transcribeBrowserAudio(url, { lang, signal });
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
       case "addCanvas": {
         const { name } = canvasSchemas.addCanvas.parse(request.args);
         return options.menu().addCanvas(name, signal);
@@ -130,7 +159,7 @@ export function useCanvasTools(options: {
       case "renameCanvas": {
         const { canvasId: targetId = canvasId, name } = canvasSchemas.renameCanvas.parse(request.args);
         const nextName = name.trim();
-        const renamedId = options.menu().getCanvases().find(canvas => canvas.id === targetId)?.name === nextName
+        const renamedId = options.menu().peekCanvases().find(canvas => canvas.id === targetId)?.name === nextName
           ? targetId : `${targetId.slice(0, targetId.lastIndexOf("/") + 1)}${nextName}.json`;
         await options.menu().renameCanvas(targetId, nextName, signal);
         return targetId === canvasId ? renamedId : canvasId;

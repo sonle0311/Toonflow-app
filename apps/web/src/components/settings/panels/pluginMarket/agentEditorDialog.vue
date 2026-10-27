@@ -3,9 +3,9 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" showIcon />
     <div v-loading="loading" class="agentEditor">
       <nav class="fileList" aria-label="Agent 文件">
-        <el-button v-if="readme" text :type="selectedPath === '' ? 'primary' : undefined" @click="selectFile('')"><icon-book :size="15" />说明</el-button>
+        <el-button v-if="readme" text :type="selectedPath === '' ? 'primary' : undefined" @click="selectFile('')"><icon-book :size="18" aria-hidden="true" />说明</el-button>
         <el-button v-for="file in files" :key="file.path" text :type="selectedPath === file.path ? 'primary' : undefined" :disabled="saving" @click="selectFile(file.path)">
-          <icon-file :size="15" /><span class="fileName">{{ file.path }}</span><span v-if="file.content !== file.original" class="dirtyMark">●</span>
+          <icon-file :size="18" aria-hidden="true" /><span class="fileName">{{ file.path }}</span><span v-if="file.content !== file.original" class="dirtyMark">●</span>
         </el-button>
       </nav>
       <div class="fileContent">
@@ -21,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+import { translate } from "@toonflow/i18n/vue";
 import axios from "axios";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -57,7 +58,7 @@ onMounted(async () => {
 });
 
 function errorMessage(cause: unknown) {
-  return axios.isAxiosError(cause) ? cause.response?.data?.message || cause.message : cause instanceof Error ? cause.message : "操作失败";
+  return axios.isAxiosError(cause) ? cause.response?.data?.message || cause.message : cause instanceof Error ? cause.message : translate("操作失败");
 }
 
 function selectFile(path: string) {

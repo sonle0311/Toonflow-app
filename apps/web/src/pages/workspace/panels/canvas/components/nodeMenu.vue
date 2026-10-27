@@ -17,16 +17,18 @@
     virtualTriggering
     :virtualRef="menuAnchor"
     placement="bottom-start"
+    :popperOptions="{ strategy: 'fixed', modifiers: [{ name: 'preventOverflow', options: { altAxis: true, padding: 8 } }] }"
     :showArrow="false"
     :showTimeout="0"
     :hideTimeout="0"
     :hideOnClick="false"
     @command="handleCommand"
-    @visibleChange="(visible: boolean) => !visible && clearConnection()">
+    @visibleChange="onMenuVisibleChange">
     <template #dropdown>
       <el-dropdown-menu
         ref="menuList"
         class="nodeMenu"
+        @focus.self="menuLevel === 'nodes' && nodeMenuItemsRef?.focusFirst()"
         :aria-label="menuLevel === 'selection' ? '选区操作' : menuLevel === 'arrange' ? '整理选中节点' : menuLevel === 'actions' ? '操作菜单' : '添加节点'">
         <template v-if="menuLevel === 'selection'">
           <el-dropdown-item command="duplicateSelection" :icon="IconCopyPlus" :disabled="selectionBusy || deleting || !selectedNodes.length">
@@ -61,16 +63,23 @@
           <el-dropdown-item command="redo" :icon="IconArrowForwardUp" :disabled="!canRedo">重做</el-dropdown-item>
           <el-divider />
           <el-dropdown-item command="paste" :icon="IconClipboard" :disabled="!pasteNode || pasting">
-            {{ pasting ? "粘贴中…" : "粘贴节点、文本或媒体" }}
+            {{ pasting ? "粘贴中…" : "粘贴" }}
           </el-dropdown-item>
         </template>
         <template v-else>
           <el-dropdown-item v-if="!directNodes" command="actions" :icon="IconChevronLeft">返回操作菜单</el-dropdown-item>
           <el-dropdown-item v-else disabled>添加节点</el-dropdown-item>
-          <el-dropdown-item v-for="node in filteredNodes" :key="node.type" :command="node.type" :icon="node.icon">
-            {{ node.label }}
-          </el-dropdown-item>
-          <el-dropdown-item v-if="(pendingHandle || pendingGroup.length) && !filteredNodes.length" disabled>没有可连接的节点</el-dropdown-item>
+          <el-dropdown-item v-if="!menuItems.length" disabled>{{ pendingHandle || pendingGroup.length ? "没有可连接的节点" : "没有可显示的节点" }}</el-dropdown-item>
+          <nodeMenuItems
+            v-if="menuVisible"
+            ref="nodeMenuItemsRef"
+            :items="menuItems"
+            :nodes="filteredNodes"
+            :appendTo="menuContainer"
+            :uploadDisabled="!uploadFiles"
+            @select="handleCommand"
+            @upload="handleCommand('upload')"
+            @close="menu?.handleClose()" />
         </template>
       </el-dropdown-menu>
     </template>
@@ -78,12 +87,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, type Component } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import { useVueFlow, type ConnectingHandle, type GraphNode, type HandleType } from "@vue-flow/core";
 import { isTypeCompatible, useNodeEvent, validateConnection, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
 import { ElMessage } from "element-plus";
 import type { DropdownInstance } from "element-plus";
 import selectionHandle from "./selectionHandle.vue";
+import nodeMenuItems from "./nodeMenuItems.vue";
+import { generalSettings } from "@/stores/settings";
+import { filterNodeMenu, resolveNodeMenu } from "@toonflow/server/nodeMenu";
 import { getSelectionConnections } from "../selectionConnections";
 import { getSelectionRoots, getSelectionTree } from "../selectionNodes";
 import { arrangeSelection } from "../arrangeSelection";
@@ -103,8 +115,9 @@ import {
   IconLayoutGrid,
 } from "@tabler/icons-vue";
 
-const { remoteNodes = [], pasteNode, uploadFiles, canUndo = false, canRedo = false, selectionBusy = false, batchHistory } = defineProps<{
+const { remoteNodes = [], disabled = false, pasteNode, uploadFiles, canUndo = false, canRedo = false, selectionBusy = false, batchHistory } = defineProps<{
   remoteNodes?: { type: string; label: string }[];
+  disabled?: boolean;
   pasteNode?: (position: { x: number; y: number }) => Promise<boolean>;
   uploadFiles?: (position: { x: number; y: number }) => void;
   canUndo?: boolean;
@@ -115,6 +128,9 @@ const { remoteNodes = [], pasteNode, uploadFiles, canUndo = false, canRedo = fal
 const emit = defineEmits<{ history: []; undo: []; redo: []; duplicateSelection: [] }>();
 const menu = ref<DropdownInstance>();
 const menuList = ref<{ $el: HTMLElement }>();
+const menuVisible = ref(false);
+const nodeMenuItemsRef = ref<InstanceType<typeof nodeMenuItems>>();
+const menuContainer = computed(() => menuList.value?.$el.closest<HTMLElement>(".el-dropdown__popper") ?? undefined);
 const menuLevel = ref<"actions" | "nodes" | "selection" | "arrange">("actions");
 const selectedNodes = shallowRef<GraphNode[]>([]);
 const deleting = ref(false);
@@ -138,12 +154,11 @@ const canArrangeSelection = computed(() => {
       && Number.isFinite(node.dimensions.width) && node.dimensions.width > 0
       && Number.isFinite(node.dimensions.height) && node.dimensions.height > 0);
 });
-const nodeOrder: Record<string, number> = { "remote-textNode": 0, "remote-imageNode": 1, "remote-videoNode": 2, "remote-audioNode": 3 };
 const filteredNodes = computed(() => {
   const nodes = remoteNodes.map(node => ({
     ...node,
     icon: (flow.nodeTypes?.value?.[node.type] as { icon?: Component } | undefined)?.icon ?? IconBox,
-  })).sort((left, right) => (nodeOrder[left.type] ?? 4) - (nodeOrder[right.type] ?? 4));
+  }));
   if (pendingGroup.value.length) {
     if (!flow.nodesConnectable.value || pendingGroup.value.some(node => flow.findNode(node.id) !== node || node.connectable === false)) return [];
     return nodes.filter(node => {
@@ -162,6 +177,18 @@ const filteredNodes = computed(() => {
     return handles?.some((item) => item.type !== port.type && isTypeCompatible(port.dataType, item.dataType));
   });
 });
+
+const menuItems = computed(() => filterNodeMenu(
+  resolveNodeMenu(generalSettings.value.nodeMenu, remoteNodes),
+  new Set(filteredNodes.value.map(node => node.type)),
+));
+
+async function onMenuVisibleChange(visible: boolean) {
+  menuVisible.value = visible;
+  if (!visible) return clearConnection();
+  await nextTick();
+  if (menuLevel.value === "nodes") nodeMenuItemsRef.value?.focusFirst();
+}
 
 function clearSelectionHandles() {
   selectionHandleRef.value?.clear();
@@ -186,6 +213,11 @@ function startSelectionConnection() {
 }
 
 onBeforeUnmount(clearConnection);
+watch(() => disabled, value => {
+  if (!value) return;
+  menu.value?.handleClose();
+  clearConnection();
+});
 flow.onConnectStart(() => {
   pendingHandle.value = undefined;
   clearConnection();
@@ -207,11 +239,12 @@ flow.onConnectEnd((event) => {
 async function openMenu(event: MouseEvent | TouchEvent, nodesOnly = false, selection: GraphNode[] = [], handle?: DraggedHandle, group: GraphNode[] = []) {
   event.preventDefault();
   event.stopPropagation();
+  if (disabled) return;
   emit("history");
   menu.value?.handleClose();
   clearConnection();
   await nextTick();
-  if (!menu.value || (handle && flow.findNode(handle.node.id) !== handle.node)) return;
+  if (disabled || !menu.value || (handle && flow.findNode(handle.node.id) !== handle.node)) return;
   pendingHandle.value = handle;
   pendingGroup.value = group;
   directNodes.value = nodesOnly;
@@ -228,7 +261,7 @@ async function openMenu(event: MouseEvent | TouchEvent, nodesOnly = false, selec
     flow.startConnection(handle.start, { x: clientX - bounds.left, y: clientY - bounds.top });
   }
   await nextTick();
-  menu.value?.handleOpen();
+  if (!disabled) menu.value?.handleOpen();
 }
 
 onPaneContextMenu(openMenu);
@@ -239,14 +272,23 @@ flow.onNodeContextMenu(() => {
   clearConnection();
   menu.value?.handleClose();
 });
-defineExpose({ openMenu, deleteSelection });
+defineExpose({ openMenu, deleteSelection, addNode });
+
+async function addNode(type: string, position: { x: number; y: number }) {
+  clearConnection();
+  emit("history");
+  nodePosition = { ...position };
+  await handleCommand(type);
+}
 
 async function handleCommand(command: unknown) {
+  if (disabled) return;
   if (command === "nodes" || command === "actions" || command === "selection" || command === "arrange") {
     if (command === "arrange" && !canArrangeSelection.value) return;
     menuLevel.value = command;
     await nextTick();
-    menuList.value?.$el.focus();
+    if (command === "nodes") nodeMenuItemsRef.value?.focusFirst();
+    else menuList.value?.$el.focus();
     return;
   }
   if (command === "duplicateSelection") {
@@ -333,7 +375,7 @@ async function runCommand(command: unknown) {
       flow.removeSelectedElements();
       flow.addSelectedNodes(group);
       flow.nodesSelectionActive.value = true;
-      ElMessage.warning("该节点的接收规则不允许整组选中节点连接");
+      ElMessage.warning("目标节点的接收规则不允许整组连接，请尝试分别连接。");
     }
     return;
   }
@@ -360,7 +402,7 @@ async function runCommand(command: unknown) {
         validateConnection(item, { sourceNode, targetNode, nodes: flow.getNodes.value, edges: flow.getEdges.value })
     );
   if (connection) flow.addEdges(connection);
-  else ElMessage.warning("节点已创建，但没有兼容的端口可连接");
+  else ElMessage.warning("节点已创建，但没有兼容的端口可连接。");
   clearConnection();
   menu.value?.handleClose();
 }

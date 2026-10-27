@@ -3,11 +3,12 @@ import express from "express";
 import cors from "cors";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import { readFile } from "@toonflow/file";
+import { readFile, readdir } from "@toonflow/file";
 import type { Request, Response, NextFunction } from "express";
 import buildRoute from "@/core";
 import { errorFromCause } from "@/lib/responseFormat";
 import desktopRequest from "@/lib/desktop";
+import { getRuntimePlatform } from "@/lib/platform";
 import initializePlugins from "@/utils/plugins/initialize";
 import { languageRequest, resolveRequestLocale, runWithLocale, setLocaleFallback, translateError, translateMessage } from "@/lib/i18n";
 import { detectLocale, normalizeLocale } from "@toonflow/i18n";
@@ -40,6 +41,8 @@ export async function createApp({
   // conf 由下方的路由动态加载，必须先确定整个进程共用的数据目录。
   if (dataDirectory) process.env.TOONFLOW_DATA_DIR = resolve(dataDirectory);
   const { default: conf } = await import("@/utils/conf");
+  const { initializeNetwork } = await import("@/utils/network");
+  await initializeNetwork();
   setLocaleFallback(() => normalizeLocale((conf.get("settings", {}).ui as { language?: unknown } | undefined)?.language)
     ?? detectLocale([Intl.DateTimeFormat().resolvedOptions().locale]));
   if (dataDirectory && toolsRoot)
@@ -71,8 +74,21 @@ export async function createApp({
   if (dataDirectory && agentsRoot) await initializePlugins(resolve(dataDirectory, "agents"), agentsRoot);
   const app = express();
   app.locals.appVersion = appVersion;
+  // ACT: 内置身份取自当前发行包的目录，不依赖作者或安装记录；更新后的同名插件仍属于内置插件。
+  app.locals.builtinPlugins = Object.fromEntries(await Promise.all(
+    Object.entries({ tool: toolsRoot, node: nodesRoot, ext: extRoot, skill: skillsRoot, agent: agentsRoot }).map(async ([type, root]) => {
+      const entries = root ? await readdir(root, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      }) : [];
+      const pattern = type === "tool" ? /^[a-z][a-zA-Z0-9]*\.tool\.js$/ : type === "ext" ? /^ext-[a-z][a-zA-Z0-9]*\.umd\.js$/ : /^[a-z][a-zA-Z0-9]*\.umd\.js$/;
+      const names = entries.filter(entry => type === "skill" || type === "agent" ? entry.isDirectory() : entry.isFile() && pattern.test(entry.name))
+        .map(entry => entry.isDirectory() ? entry.name : entry.name.replace(/\.(?:tool|umd)\.js$/, ""));
+      return [type, new Set(names)];
+    }),
+  ));
 
-  if (process.env.NODE_ENV === "dev") {
+  if (getRuntimePlatform().development) {
     await buildRoute();
     app.use(logger("dev"));
   }
@@ -85,7 +101,8 @@ export async function createApp({
   app.use("/api/desktop", desktopRequest);
 
   const { default: initializeProviderModels } = await import("@/utils/ai/initialize");
-  await initializeProviderModels();
+  // ACT: 启动先使用已有模型，远程刷新不阻塞服务监听。
+  void initializeProviderModels().catch(error => console.warn("启动时刷新供应商模型失败：", error));
   const router = await import("@/router");
   router.default(app);
   const [{ createMcpRouter }, { getMcpTools }, { authorizeMcp }, { skillResources }] = await Promise.all([

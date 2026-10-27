@@ -85,11 +85,13 @@
 </template>
 
 <script setup lang="ts">
+import { translate } from "@toonflow/i18n/vue";
 import axios from "axios";
 import jsQR from "jsqr";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { IconCamera, IconPhoto, IconQrcode, IconDeviceDesktop, IconKeyboard } from "@tabler/icons-vue";
-import { changeDeviceConnection, deviceConnectionSupported, deviceHubEnabled, getDeviceVersionWarning, isDesktop, mobileConnection, mobileConnectionLabel, mobileConnectionVersionWarning, refreshMobileConnection } from "@/lib/mobile";
+import { changeDeviceConnection, deviceConnectionSupported, deviceHubEnabled, getDeviceVersionWarning, mobileConnection, mobileConnectionLabel, mobileConnectionVersionWarning, refreshMobileConnection } from "@/lib/mobile";
+import { isDesktop } from "@/lib/platform";
 
 type Candidate = { name: string; url: string; qrCode: string; appVersion?: string };
 
@@ -123,7 +125,7 @@ let cameraRun = 0;
 let dialogRun = 0;
 
 function errorMessage(cause: unknown) {
-  return axios.isAxiosError<{ message?: string }>(cause) ? cause.response?.data?.message || cause.message : cause instanceof Error ? cause.message : "操作失败，请重试";
+  return axios.isAxiosError<{ message?: string }>(cause) ? cause.response?.data?.message || cause.message : cause instanceof Error ? cause.message : translate("操作失败，请重试");
 }
 
 function stopCamera() {

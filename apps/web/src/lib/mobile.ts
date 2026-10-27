@@ -1,15 +1,11 @@
 import { computed, ref } from "vue";
 import axios from "axios";
 import { t, translate } from "@toonflow/i18n/vue";
-
-export const isMobile = new URLSearchParams(window.location.search).get("mobile") === "1";
-export const isDesktop = new URLSearchParams(window.location.search).get("desktop") === "1";
-export const isRemoteConnection = (isMobile || isDesktop) && new URLSearchParams(window.location.search).get("remote") === "1";
-export const isRemoteMobile = isMobile && isRemoteConnection;
+import { actualPlatform } from "./platform";
 
 type MobileConnection = { mode: "local" | "remote"; name?: string; url?: string; online?: boolean | null; appVersion?: string; remoteAppVersion?: string };
 
-export const mobileConnection = ref<MobileConnection>({ mode: isRemoteConnection ? "remote" : "local" });
+export const mobileConnection = ref<MobileConnection>({ mode: actualPlatform.isRemoteConnection ? "remote" : "local" });
 export const deviceHubEnabled = ref(false);
 export const deviceConnectionSupported = ref(true);
 export function getDeviceVersionWarning(appVersion?: string, remoteAppVersion?: string) {
@@ -38,7 +34,7 @@ export async function refreshMobileConnection() {
       let data: MobileConnection = { mode: "local" };
       if (deviceConnectionSupported.value) {
         const response = await fetch("/api/connection/connection", { cache: "no-store", signal: request.signal });
-        if (response.status === 404 && !isMobile && !isDesktop) deviceConnectionSupported.value = false;
+        if (response.status === 404 && !actualPlatform.isMobile && !actualPlatform.isDesktop) deviceConnectionSupported.value = false;
         else {
           if (!response.ok) throw new Error("无法读取设备连接状态，请重试");
           data = await response.json() as MobileConnection;
@@ -46,7 +42,7 @@ export async function refreshMobileConnection() {
       }
       if (data.mode !== "local" && data.mode !== "remote") throw new Error("设备连接状态无效，请重试");
       mobileConnection.value = data;
-      if (!isMobile && data.mode === "local") {
+      if (!actualPlatform.isMobile && data.mode === "local") {
         const status = await fetch("/api/mobileLink/status", { headers: { "x-toonflow-mobile-link": "1" }, cache: "no-store", signal: request.signal });
         if (status.ok) {
           const body = await status.json() as { code?: number; data?: { enabled?: boolean; hubEnabled?: boolean } };
@@ -72,7 +68,7 @@ export async function changeDeviceConnection(action: "connect" | "disconnect", b
     await refreshMobileConnection();
     if (deviceHubEnabled.value) throw new Error("请先在设置 → 设备互联中关闭“允许其他设备连接”");
   }
-  if (!deviceConnectionSupported.value) throw new Error("请使用 Toonflow 桌面端或 Android 客户端连接其他设备");
+  if (!deviceConnectionSupported.value) throw new Error("请使用 Toonflow 桌面端或移动客户端连接其他设备");
   const { data } = await axios.post<{ restart: "mobile" | "host"; message?: string }>(`/api/connection/${action}`, body ?? {}, { headers: { "x-toonflow-workspace": "1" } });
   if (data?.restart !== "mobile" && data?.restart !== "host") throw new Error(data?.message || "设备未返回有效的切换方式，请重试");
   if (data.restart === "mobile") window.location.href = "toonflow://restart";

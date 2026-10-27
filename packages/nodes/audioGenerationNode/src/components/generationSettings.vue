@@ -1,10 +1,10 @@
 <template>
-  <el-popover trigger="click" placement="top-start" width="min(380px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '16px' }">
+  <el-popover v-model:visible="settingsVisible" trigger="click" placement="top-start" width="min(380px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '16px' }">
     <template #reference>
-      <el-button class="settingsButton" text size="small" :disabled="disabled" aria-label="音频生成设置">
+      <el-button class="settingsButton" text size="small" :disabled="disabled" :aria-expanded="settingsVisible" aria-label="音频生成设置">
         <icon-adjustments-horizontal :size="15" aria-hidden="true" />
         <span>{{ languageLabel }} · {{ sampleRate / 1000 }}k · {{ format }}</span>
-        <icon-chevron-up :size="14" aria-hidden="true" />
+        <component :is="settingsVisible ? IconChevronDown : IconChevronUp" :size="14" aria-hidden="true" />
       </el-button>
     </template>
     <div class="generationSettings nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
@@ -27,20 +27,25 @@
         </div>
       </div>
       <div class="settingsSummary">{{ languageLabel }} · {{ sampleRate / 1000 }} kHz · {{ formatLabels[format] ?? format }}</div>
+      <modelForm v-model="other" :rules="model?.rules" :disabled="disabled" />
     </div>
   </el-popover>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { ElButton, ElPopover, ElSegmented } from "element-plus";
-import { IconAdjustmentsHorizontal, IconChevronUp } from "@tabler/icons-vue";
+import { IconAdjustmentsHorizontal, IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
+import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
+import modelForm from "@toonflow/node-shared/modelForm";
 import { languageOptions, sampleRateOptions, formatOptions } from "../audioSettings";
 
-defineProps<{ disabled?: boolean }>();
+defineProps<{ model?: NodeMediaModel; disabled?: boolean }>();
+const settingsVisible = ref(false);
 const language = defineModel<string>("language", { required: true });
 const sampleRate = defineModel<number>("sampleRate", { required: true });
 const format = defineModel<string>("format", { required: true });
+const other = defineModel<Record<string, unknown>>("other", { required: true });
 const formatLabels: Record<string, string> = { wav: "WAV", mp3: "MP3", pcm: "PCM", ogg_opus: "Ogg Opus" };
 const sampleRates = sampleRateOptions.map(value => ({ label: `${value / 1000}k`, value }));
 const formats = formatOptions.map(value => ({ label: value === "ogg_opus" ? "Opus" : formatLabels[value], value }));

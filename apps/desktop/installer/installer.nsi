@@ -30,7 +30,7 @@ ShowInstDetails show
 !define MUI_DIRECTORYPAGE_TEXT_TOP "请选择 Toonflow 的安装目录。"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN "$INSTDIR\app\bin\launcher.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\app\Resources\app\startupLauncher.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "立即打开 Toonflow"
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW showFinishPage
 !insertmacro MUI_PAGE_FINISH
@@ -132,14 +132,22 @@ Section "Install"
   ${EndIf}
 
 installApp:
-  ; NSIS 是 x86，Sysnative 指向系统 x64 tar，避免重定向到 SysWOW64。
-  IfFileExists "$WINDIR\Sysnative\tar.exe" tarReady 0
-    MessageBox MB_OK|MB_ICONSTOP "未找到 Windows 系统 tar.exe，无法解压应用，请更新 Windows 后重试。" /SD IDOK
-    SetErrorLevel 2
-    Abort
-tarReady:
   Call ensureWebView2
   !insertmacro ensureAppStopped "安装"
+  ClearErrors
+  StrCpy $installStep "准备应用解压工具"
+  File "/oname=$PLUGINSDIR\updateHelper.exe" "${updateHelper}"
+  IfErrors installFailed
+  DetailPrint "正在检查解压工具，缺失时将从 7-Zip 官方下载。"
+  nsExec::ExecToStack /TIMEOUT=720000 '"$PLUGINSDIR\updateHelper.exe" --ensure-archive-tool "$INSTDIR" --quiet'
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+    DetailPrint "解压工具准备失败，返回码：$0；$1"
+    MessageBox MB_OK|MB_ICONSTOP "无法准备应用解压工具，请确认网络和目录权限后重试。$\r$\n$1" /SD IDOK
+    SetErrorLevel 2
+    Abort
+  ${EndIf}
   ClearErrors
   StrCpy $installStep "创建应用目录"
   SetOutPath "$INSTDIR\app"
@@ -168,7 +176,7 @@ tarReady:
     RMDir /r "$INSTDIR\app\Resources\app\providers"
   IfErrors installFailed
   ; ACT: 仅打包一份 tar，释放应用后保留原文件作为增量更新基线。
-  nsExec::ExecToStack '"$WINDIR\Sysnative\tar.exe" -xf "$INSTDIR\self-extraction\${appHash}.tar" -C "$INSTDIR\app" --strip-components=1'
+  nsExec::ExecToStack '"$PLUGINSDIR\updateHelper.exe" --extract-install "$INSTDIR" "$INSTDIR\self-extraction\${appHash}.tar" --quiet'
   Pop $0
   Pop $1
   ${If} $0 != 0
@@ -178,6 +186,7 @@ tarReady:
   ${EndIf}
   StrCpy $installStep "检查应用启动文件"
   IfFileExists "$INSTDIR\app\bin\launcher.exe" 0 installFailed
+  IfFileExists "$INSTDIR\app\Resources\app\startupLauncher.exe" 0 installFailed
   StrCpy $installStep "设置应用启动目录"
   SetOutPath "$INSTDIR\app\bin"
   IfErrors installFailed
@@ -210,10 +219,10 @@ tarReady:
   WriteRegStr HKCU "Software\Classes\toonflow\DefaultIcon" "" '$\"$INSTDIR\app\Resources\app.ico$\",0'
   WriteRegStr HKCU "Software\Classes\toonflow\shell\open\command" "" '$\"$INSTDIR\app\Resources\app\protocolLauncher.exe$\" $\"%1$\"'
   IfErrors installFailed
-  CreateShortCut "$DESKTOP\${appName}.lnk" "$INSTDIR\app\bin\launcher.exe" "" "$INSTDIR\app\Resources\app.ico"
+  CreateShortCut "$DESKTOP\${appName}.lnk" "$INSTDIR\app\Resources\app\startupLauncher.exe" "" "$INSTDIR\app\Resources\app.ico"
   IfErrors 0 installDone
   ; ACT: 快捷方式不影响程序使用，失败时保留成功安装结果并告知手动启动路径。
-  MessageBox MB_OK|MB_ICONEXCLAMATION "Toonflow 已安装，但无法创建桌面快捷方式。可以从以下位置启动：$\r$\n$INSTDIR\app\bin\launcher.exe" /SD IDOK
+  MessageBox MB_OK|MB_ICONEXCLAMATION "Toonflow 已安装，但无法创建桌面快捷方式。可以从以下位置启动：$\r$\n$INSTDIR\app\Resources\app\startupLauncher.exe" /SD IDOK
   Goto installDone
 
 installFailed:
@@ -244,6 +253,12 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\app"
   IfErrors uninstallFailed
   RMDir /r "$INSTDIR\self-extraction"
+  IfFileExists "$INSTDIR\runtime\sevenZip\*.*" 0 +2
+    RMDir /r "$INSTDIR\runtime\sevenZip"
+  IfErrors uninstallFailed
+  ; ACT: runtime 可能还有其他运行时，只尝试删除已清空的父目录。
+  RMDir "$INSTDIR\runtime"
+  ClearErrors
   Delete "$INSTDIR\uninstall.exe"
   Delete "$INSTDIR\.electrobun-uninstall.json"
   Delete "$INSTDIR\.electrobun-update-*.json"

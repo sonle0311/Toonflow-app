@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     class="singleAgentDialog"
-    :title="title"
+    :title="title ?? 'Agent 对话'"
     :width="slots.aside ? 'min(1240px, calc(100vw - 32px))' : 'min(800px, calc(100vw - 32px))'"
     alignCenter
     appendToBody
@@ -16,7 +16,7 @@
             <messageMarkdown v-else-if="!message.parts?.length && message.content" :content="message.content" :streaming="!!message.streaming" :directory="sessionDirectory" />
             <template v-for="part in message.parts" :key="part.id">
               <details v-if="part.type === 'thinking' && part.content" class="thinkingContent">
-                <summary>思考<span v-if="part.duration !== undefined"> · {{ part.duration.toFixed(1) }} 秒</span></summary>
+                <summary><icon-chevron-right class="thinkingChevron" :size="14" aria-hidden="true" />思考<span v-if="part.duration !== undefined"> · {{ part.duration.toFixed(1) }} 秒</span></summary>
                 <messageMarkdown :content="part.content" :streaming="!!message.streaming" :directory="sessionDirectory" />
               </details>
               <slot v-else-if="part.type === 'tool'" name="tool" :tool="part.tool" :sessionId="sessionId" :status="status" :pause="pause" :resume="resume">
@@ -68,8 +68,9 @@ import axios from "axios";
 import { translate } from "@toonflow/i18n/vue";
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useSlots, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { IconArrowUp, IconPlayerPause, IconPlayerPlay, IconPlayerStopFilled } from "@tabler/icons-vue";
+import { IconArrowUp, IconChevronRight, IconPlayerPause, IconPlayerPlay, IconPlayerStopFilled } from "@tabler/icons-vue";
 import type { SingleAgentEvent } from "@toonflow/server/singleAgent/types";
+import type { ThinkingLevel } from "@toonflow/server/modelReasoning";
 import type { ToolCall } from "@toonflow/tools-scaffold/runtime";
 import modelPopover from "@/components/modelPopover.vue";
 import messageMarkdown from "@/components/messageMarkdown.vue";
@@ -77,6 +78,7 @@ import toolMessage from "./agent/toolMessage.vue";
 import { createReplyStream, readAgentEvents } from "./agent/replyStream";
 import { modelChoices } from "@/stores/settings";
 import { writeClipboardText } from "@/lib/clipboard";
+import { showNotification } from "@/lib/notification";
 
 const props = withDefaults(defineProps<{
   tools?: SingleAgentTool[];
@@ -85,11 +87,11 @@ const props = withDefaults(defineProps<{
   directory?: string;
   title?: string;
   placeholder?: string;
-}>(), { tools: () => [], systemPrompt: "", initialMessage: "", title: "Agent 对话", placeholder: "输入消息" });
+}>(), { tools: () => [], systemPrompt: "", initialMessage: "", placeholder: "输入消息" });
 const visible = defineModel<boolean>({ default: false });
 const msgList = defineModel<AgentMessage[]>("msgList", { default: () => [] });
 const selectedModel = defineModel<string>("model", { default: "" });
-const thinkingLevel = defineModel<"off" | "low" | "medium" | "high">("thinkingLevel", { default: "off" });
+const thinkingLevel = defineModel<ThinkingLevel | undefined>("thinkingLevel", { default: undefined });
 const emit = defineEmits<{
   complete: [result: SingleAgentDialogResult];
   error: [error: Error];
@@ -105,7 +107,7 @@ const status = ref<"idle" | "running" | "pausing" | "paused">("idle");
 const busy = ref(false);
 const messageList = ref<HTMLElement>();
 const tools = computed<ToolCall[]>(() => msgList.value.flatMap(message => message.parts?.flatMap(part => part.type === "tool" ? [part.tool] : []) ?? []));
-const reasoningEffort = computed({ get: () => thinkingLevel.value === "off" ? "" : thinkingLevel.value, set: value => { thinkingLevel.value = value as typeof thinkingLevel.value || "off"; } });
+const reasoningEffort = computed({ get: () => thinkingLevel.value ?? "", set: (value: string) => { thinkingLevel.value = value ? value as ThinkingLevel : undefined; } });
 const statusLabels = { idle: "", running: "执行中", pausing: "等待当前操作结束…", paused: "已暂停，可人工操作" };
 const requestHeaders = { "x-toonflow-workspace": "1" };
 let lifecycle = new AbortController();
@@ -185,7 +187,7 @@ async function executeClientTool(event: Extract<SingleAgentEvent, { type: "clien
   } catch (error) {
     acceptingUpdates = false;
     if (signal.aborted) return;
-    try { await sendResult({ error: error instanceof Error ? error.message : "工具执行失败" }); }
+    try { await sendResult({ error: error instanceof Error ? error.message : translate("工具执行失败") }); }
     catch (reason) {
       if (!signal.aborted && lifecycle === owner && turnController === controller) {
         reportError(reason);
@@ -210,6 +212,8 @@ async function send(content = draft.value) {
   turnId = reply.id;
   const stream = createReplyStream(reply);
   let accepted = false;
+  let notifiedCompletion = false;
+  const notifiedQuestions = new Set<string>();
   try {
     const id = await ensureSession(owner, signal);
     signal.throwIfAborted();
@@ -224,12 +228,22 @@ async function send(content = draft.value) {
     });
     for await (const event of readAgentEvents<SingleAgentEvent>(response, signal)) {
       if (lifecycle !== owner) break;
-      if (event.type === "text" || event.type === "thinking" || event.type === "tool" || event.type === "question") stream.receive(event);
+      if (event.type === "text" || event.type === "thinking" || event.type === "tool" || event.type === "question" || event.type === "retry") stream.receive(event);
+      if (event.type === "question" && !signal.aborted && !notifiedQuestions.has(event.callId)) {
+        notifiedQuestions.add(event.callId);
+        void showNotification({ title: "Toonflow", body: translate("工具正在等待你的确认") })
+          .catch(error => console.warn("系统通知发送失败", error));
+      }
       if (event.type === "status") changeStatus(event.status);
       if (event.type === "tool" || event.type === "toolResult" || event.type === "clientTool") emit("toolEvent", event);
       if (event.type === "clientTool") void executeClientTool(event, id, signal, owner, controller);
       if (event.type === "complete") {
         stream.finish();
+        if (!notifiedCompletion && !signal.aborted) {
+          notifiedCompletion = true;
+          void showNotification({ title: "Toonflow", body: translate("Agent 已完成回复") })
+            .catch(error => console.warn("系统通知发送失败", error));
+        }
         emit("complete", { text: event.text, toolResults: event.toolResults, messages: JSON.parse(JSON.stringify(msgList.value)) });
       }
     }
@@ -374,8 +388,19 @@ defineExpose({ send, pause, resume, stop, sessionId, msgList, tools, status });
           }
           .thinkingContent {
             margin: 10px 0;
-            summary { width: fit-content; color: var(--el-text-color-secondary); font-size: 12px; cursor: pointer; }
+            summary {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              width: fit-content;
+              color: var(--el-text-color-secondary);
+              font-size: 12px;
+              cursor: pointer;
+              &::-webkit-details-marker { display: none; }
+              .thinkingChevron { flex-shrink: 0; }
+            }
             &[open] summary { margin-bottom: 8px; }
+            &[open] .thinkingChevron { transform: rotate(90deg); }
           }
           .replyPending { color: var(--el-text-color-secondary); }
           .messageError { margin-top: 8px; color: var(--el-color-danger); }

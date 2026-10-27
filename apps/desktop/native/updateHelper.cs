@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -28,6 +30,10 @@ internal static class updateHelper
     [STAThread]
     private static int Main(string[] args)
     {
+        Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true });
+        Console.SetError(new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true });
+        if (args.Length > 0 && (args[0] == "--ensure-archive-tool" || args[0] == "--read-archive-info" || args[0] == "--extract-install"))
+            return archiveCommand(args);
         string root = null, transaction = null, version = null, hash = null, planPath = null;
         bool quiet = Array.IndexOf(args, "--quiet") >= 0;
         Mutex mutex = null;
@@ -43,7 +49,6 @@ internal static class updateHelper
                 spawnScheduledUpdate(Process.GetCurrentProcess().MainModule.FileName, planPath, quiet);
                 return 0;
             }
-            if (args[0] == "--apply-scheduled-update") scheduledTaskFolder().DeleteTask(scheduledTaskName(planPath), 0);
             var plan = readJson(planPath);
             if (plan.Count != 9 || number(plan, "schemaVersion") != 1)
                 throw new InvalidOperationException("更新计划格式不受支持。");
@@ -88,18 +93,19 @@ internal static class updateHelper
             {
                 // 保持句柄，避免 PID 复用；仅等待当前安装的宿主，不终止其他进程。
                 IntPtr parentHandle = parent.Handle;
-                if (parent.HasExited || !inside(parent.MainModule.FileName, Path.Combine(root, "app", "bin")))
+                string parentPath = parent.MainModule.FileName;
+                if (parent.HasExited || (!inside(parentPath, Path.Combine(root, "app", "bin"))
+                    && !samePath(parentPath, Path.Combine(root, "app", "Resources", "app", "startupLauncher.exe"))))
                     throw new InvalidOperationException("父进程不属于当前 Toonflow 安装。");
                 using (var sha = SHA256.Create())
                     if (!String.Equals(BitConverter.ToString(sha.ComputeHash(archiveStream)).Replace("-", ""), expectedDigest, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("更新包 SHA-256 校验失败。");
                 archiveStream.Position = 0;
-                validateTar(archiveStream);
-                string tar = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess ? "Sysnative" : "System32", "tar.exe");
-                if (!File.Exists(tar)) throw new FileNotFoundException("未找到 Windows 系统 tar.exe。");
+                string archiveRoot = validateTar(archiveStream);
+                string tar = ensureArchiveTool(root, false);
                 if (!CreateDirectoryW(stage, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法创建独立的更新暂存目录。");
                 ensurePlainPath(stage);
-                extract(tar, archive, stage);
+                extract(tar, archive, stage, archiveRoot);
                 ensurePlainTree(stage);
                 verifyApp(stage, identifier, channel, version, hash);
                 if (!File.Exists(planPath)) throw new InvalidOperationException("更新已取消。");
@@ -139,6 +145,22 @@ internal static class updateHelper
         }
         finally
         {
+            // ACT: 无触发器的一次性任务清理失败不能撤销更新；保留任务到结束也能阻止同一任务重复启动。
+            if (planPath != null && args[0] == "--apply-scheduled-update")
+            {
+                try { deleteScheduledTask(planPath); }
+                catch (Exception error)
+                {
+                    string detail = "更新任务清理失败（HRESULT=0x" + error.HResult.ToString("X8") + "）：" + error.Message;
+                    try { Console.Error.WriteLine(detail); }
+                    catch { /* 宿主可能已关闭 stderr 管道，诊断不能改变更新结果。 */ }
+                    if (root != null)
+                    {
+                        try { writeFile(Path.ChangeExtension(planPath, ".cleanup.log"), detail); }
+                        catch { /* 日志不可写也不能覆盖原始结果或阻止释放安装锁。 */ }
+                    }
+                }
+            }
             if (locked) mutex.ReleaseMutex();
             if (mutex != null) mutex.Dispose();
         }
@@ -151,52 +173,77 @@ internal static class updateHelper
         return "ToonflowUpdate_" + name.Substring(7).ToLowerInvariant();
     }
 
-    private static dynamic scheduledTaskFolder()
+    private static void deleteScheduledTask(string planPath)
     {
         dynamic scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true));
         scheduler.Connect();
-        return scheduler.GetFolder("\\");
+        dynamic folder = scheduler.GetFolder("\\");
+        try
+        {
+            folder.DeleteTask(scheduledTaskName(planPath), 0);
+        }
+        catch (Exception error)
+        {
+            if (error.HResult != unchecked((int)0x80070002)) throw;
+        }
     }
 
     private static void spawnScheduledUpdate(string executable, string planPath, bool quiet)
     {
-        // ACT: breakaway 成功仍可能留在外层 Job，统一由当前用户的任务服务启动；不提权、不设置触发器，启动后删除任务。
+        // ACT: breakaway 成功仍可能留在外层 Job，统一由当前用户的任务服务启动；不提权、不设置触发器。
         string taskName = scheduledTaskName(planPath);
-        dynamic scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true));
-        scheduler.Connect();
-        dynamic folder = scheduler.GetFolder("\\");
-        dynamic task = scheduler.NewTask(0);
-        task.Principal.UserId = WindowsIdentity.GetCurrent().User.Value;
-        task.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
-        task.Principal.RunLevel = 0; // TASK_RUNLEVEL_LUA
-        task.Settings.AllowDemandStart = true;
-        task.Settings.DisallowStartIfOnBatteries = false;
-        task.Settings.StopIfGoingOnBatteries = false;
-        task.Settings.ExecutionTimeLimit = "PT15M";
-        task.Settings.Hidden = true;
-        dynamic action = task.Actions.Create(0);
-        action.Path = executable;
-        action.Arguments = "--apply-scheduled-update " + quote(planPath) + (quiet ? " --quiet" : "");
-        action.WorkingDirectory = Path.GetDirectoryName(executable);
+        string stage = "identity", sid = "unknown";
+        bool administratorToken = false;
         bool created = false;
         try
         {
+            using (var identity = WindowsIdentity.GetCurrent())
+            {
+                sid = identity.User.Value;
+                administratorToken = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+            }
+            stage = "createService";
+            dynamic scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true));
+            stage = "connect";
+            scheduler.Connect();
+            stage = "getFolder";
+            dynamic folder = scheduler.GetFolder("\\");
+            stage = "configureTask";
+            dynamic task = scheduler.NewTask(0);
+            task.Principal.UserId = sid;
+            task.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
+            task.Principal.RunLevel = 0; // TASK_RUNLEVEL_LUA
+            task.Settings.AllowDemandStart = true;
+            task.Settings.DisallowStartIfOnBatteries = false;
+            task.Settings.StopIfGoingOnBatteries = false;
+            task.Settings.ExecutionTimeLimit = "PT15M";
+            task.Settings.Hidden = true;
+            task.Settings.MultipleInstances = 2; // TASK_INSTANCES_IGNORE_NEW
+            dynamic action = task.Actions.Create(0);
+            action.Path = executable;
+            action.Arguments = "--apply-scheduled-update " + quote(planPath) + (quiet ? " --quiet" : "");
+            action.WorkingDirectory = Path.GetDirectoryName(executable);
+            stage = "registerTask";
             dynamic registered = folder.RegisterTaskDefinition(taskName, task, 2, task.Principal.UserId, null, 3, null);
             created = true;
+            stage = "runTask";
             registered.Run(null);
         }
         catch (Exception error)
         {
+            string detail = "无法通过当前用户的任务服务启动更新助手（stage=" + stage
+                + ", HRESULT=0x" + error.HResult.ToString("X8") + ", task=" + taskName + ", SID=" + sid
+                + ", administratorToken=" + administratorToken + "）：" + error.Message;
             if (created)
             {
-                try { folder.DeleteTask(taskName, 0); }
-                catch (COMException cleanupError)
+                try { deleteScheduledTask(planPath); }
+                catch (Exception cleanupError)
                 {
-                    if (cleanupError.ErrorCode != unchecked((int)0x80070002))
-                        throw new InvalidOperationException(error.Message + "\n更新任务清理失败：" + cleanupError.Message, error);
+                    detail += "\n更新任务清理失败（HRESULT=0x" + cleanupError.HResult.ToString("X8") + "）：" + cleanupError.Message;
                 }
             }
-            throw new InvalidOperationException("无法通过当前用户的任务服务启动更新助手：" + error.Message, error);
+            // Run 报错也可能已被服务接收；由宿主撤销原计划，不在这里盲目重发或改用普通子进程。
+            throw new InvalidOperationException(detail, error);
         }
     }
 
@@ -262,7 +309,10 @@ internal static class updateHelper
     private static void startApp(string root, string transaction, string version, string hash, out Process process)
     {
         process = null;
-        string launcher = Path.Combine(root, "app", "bin", "launcher.exe");
+        string bin = Path.Combine(root, "app", "bin");
+        string launcher = Path.Combine(root, "app", "Resources", "app", "startupLauncher.exe");
+        if (!File.Exists(launcher)) launcher = Path.Combine(bin, "launcher.exe");
+        ensurePlainPath(launcher);
         string startedPath = transaction == null ? null : Path.Combine(root, "self-extraction", "update-" + transaction + ".started.json");
         if (startedPath != null)
         {
@@ -271,10 +321,10 @@ internal static class updateHelper
         }
         var options = new ProcessStartInfo(launcher)
         {
-            WorkingDirectory = Path.GetDirectoryName(launcher),
+            WorkingDirectory = bin,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden
+            WindowStyle = ProcessWindowStyle.Normal
         };
         options.EnvironmentVariables.Remove("TOONFLOW_UPDATE_TRANSACTION");
         if (transaction != null) options.EnvironmentVariables["TOONFLOW_UPDATE_TRANSACTION"] = transaction;
@@ -311,7 +361,7 @@ internal static class updateHelper
 
     private static void stopApp(Process process)
     {
-        // ACT: 已退出的 launcher 由 SDK Job 清理子进程；残余占用交由有界 Move 失败保护备份，不按名称终止其他实例。
+        // ACT: 仅终止本次启动的进程树；已退出时的残余占用交由有界 Move 失败保护备份，不按名称终止其他实例。
         if (!process.HasExited)
         {
             string taskkill = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "taskkill.exe");
@@ -335,19 +385,324 @@ internal static class updateHelper
         if (!process.WaitForExit(10000)) throw new InvalidOperationException("新版本仍未退出，已保留应用备份。");
     }
 
-    private static void extract(string tar, string archive, string stage)
+    private static int archiveCommand(string[] args)
     {
-        using (var process = Process.Start(new ProcessStartInfo(tar, "-xf " + quote(archive) + " -C " + quote(stage) + " --strip-components=1")
+        bool quiet = Array.IndexOf(args, "--quiet") >= 0;
+        try
+        {
+            int count = args.Length - (quiet ? 1 : 0);
+            if ((quiet && args[args.Length - 1] != "--quiet")
+                || count != (args[0] == "--ensure-archive-tool" ? 2 : args[0] == "--read-archive-info" ? 4 : 3))
+                throw new InvalidOperationException("更新助手参数无效。");
+            string installRoot = fullPath(args[1]);
+            ensurePlainPath(installRoot);
+            if (!Directory.Exists(installRoot)) throw new DirectoryNotFoundException("安装目录不存在。");
+            if (args[0] == "--ensure-archive-tool")
+            {
+                Console.WriteLine(ensureArchiveTool(installRoot, true));
+                return 0;
+            }
+            string archive = fullPath(args[2]);
+            if (!inside(archive, Path.Combine(installRoot, "self-extraction")))
+                throw new InvalidOperationException("更新包不属于此安装目录。");
+            ensurePlainPath(archive);
+            string tool = ensureArchiveTool(installRoot, false);
+            using (var stream = new FileStream(archive, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (args[0] == "--read-archive-info")
+                {
+                    string member = args[3];
+                    if (!Regex.IsMatch(member, "^[a-zA-Z0-9_-]+/Resources/version\\.json$"))
+                        throw new InvalidOperationException("更新元数据路径无效。");
+                    string output = runArchiveTool(tool, samePath(tool, systemTar())
+                        ? "-xOf " + quote(archive) + " " + quote(member)
+                        : "x -so -ttar -spd " + quote(archive) + " " + quote(member), 60000);
+                    if (utf8.GetByteCount(output) > 65536) throw new InvalidOperationException("更新元数据过大。");
+                    Console.Write(output);
+                }
+                else
+                {
+                    string archiveRoot = validateTar(stream);
+                    string app = Path.Combine(installRoot, "app");
+                    ensurePlainPath(app);
+                    Directory.CreateDirectory(app);
+                    extract(tool, archive, app, archiveRoot);
+                }
+            }
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(error.Message);
+            if (!quiet) MessageBox.Show(error.Message, "Toonflow 解压失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return 1;
+        }
+    }
+
+    private static string systemTar()
+    {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+            Environment.Is64BitOperatingSystem && !Environment.Is64BitProcess ? "Sysnative" : "System32", "tar.exe");
+    }
+
+    private static string ensureArchiveTool(string root, bool download)
+    {
+        string tar = systemTar();
+        try
+        {
+            if ((File.GetAttributes(tar) & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+                throw new InvalidOperationException("Windows 系统 tar.exe 路径无效。");
+            return tar;
+        }
+        catch (FileNotFoundException) { }
+        catch (DirectoryNotFoundException) { }
+        string directory = Path.Combine(root, "runtime", "sevenZip");
+        string tool = Path.Combine(directory, "sevenZip.exe");
+        if (archiveToolReady(directory)) return tool;
+        if (!download) throw new FileNotFoundException("未找到可用的解压工具，请重新准备安装或更新。");
+        string mutexName;
+        using (var sha = SHA256.Create()) mutexName = BitConverter.ToString(sha.ComputeHash(utf8.GetBytes(root.ToUpperInvariant()))).Replace("-", "");
+        using (var mutex = new Mutex(false, "Local\\ToonflowArchiveTool-" + mutexName))
+        {
+            bool locked = false;
+            string temporary = null;
+            var timer = Stopwatch.StartNew();
+            try
+            {
+                try { locked = mutex.WaitOne(600000); }
+                catch (AbandonedMutexException) { locked = true; }
+                if (!locked) throw new InvalidOperationException("等待解压工具下载超时，请重试。");
+                if (archiveToolReady(directory)) return tool;
+                string runtime = Path.GetDirectoryName(directory);
+                ensurePlainPath(runtime);
+                Directory.CreateDirectory(runtime);
+                temporary = Path.Combine(runtime, "sevenZip" + Guid.NewGuid().ToString("N"));
+                if (!CreateDirectoryW(temporary, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法创建解压工具暂存目录。");
+                ensurePlainPath(temporary);
+                string bootstrap = Path.Combine(temporary, "bootstrap.exe");
+                string package = Path.Combine(temporary, "extra.7z");
+                downloadArchiveFile("https://github.com/ip7z/7zip/releases/download/26.05/7zr.exe", bootstrap, 602624,
+                    "9bf582b894dfa665f852d7e9112b02290a1c303c2d95a21fcdc41ffcb03143b7", timer);
+                downloadArchiveFile("https://github.com/ip7z/7zip/releases/download/26.05/7z2605-extra.7z", package, 1763900,
+                    "f27a8f103c84785026edcba1f67faf1357225df9d19ddb0b7760d55947141bc7", timer);
+                string copying = Path.Combine(temporary, "copying.txt");
+                downloadArchiveFile("https://raw.githubusercontent.com/ip7z/7zip/26.05/DOC/copying.txt", copying, 26530,
+                    "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551", timer);
+                string unpack = Path.Combine(temporary, "package");
+                Directory.CreateDirectory(unpack);
+                runArchiveTool(bootstrap, "x -y -spd -bso0 -bsp0 " + quote(package) + " -o" + quote(unpack) + " x64/7za.exe License.txt", 60000);
+                ensurePlainTree(unpack);
+                string extracted = Path.Combine(unpack, "x64", "7za.exe");
+                if (!fileMatches(extracted, "7ddf0a3bc451e166679296be630d6f0573eb386159c04184761c43020c484291"))
+                    throw new InvalidOperationException("解压工具 SHA-256 校验失败。");
+                string license = Path.Combine(unpack, "License.txt");
+                if (!File.Exists(license) || new FileInfo(license).Length == 0 || new FileInfo(license).Length > 65536)
+                    throw new InvalidOperationException("解压工具许可证缺失。");
+                ensurePlainPath(directory);
+                Directory.CreateDirectory(directory);
+                publishArchiveFile(copying, Path.Combine(directory, "copying.txt"));
+                publishArchiveFile(license, Path.Combine(directory, "license.txt"));
+                publishArchiveFile(extracted, tool);
+                return tool;
+            }
+            finally
+            {
+                try
+                {
+                    if (temporary != null && Directory.Exists(temporary))
+                    {
+                        ensurePlainTree(temporary);
+                        Directory.Delete(temporary, true);
+                    }
+                }
+                finally { if (locked) mutex.ReleaseMutex(); }
+            }
+        }
+    }
+
+    private static bool archiveToolReady(string directory)
+    {
+        ensurePlainPath(directory);
+        string license = Path.Combine(directory, "license.txt");
+        ensurePlainPath(license);
+        return File.Exists(license) && new FileInfo(license).Length > 0 && new FileInfo(license).Length <= 65536
+            && fileMatches(Path.Combine(directory, "copying.txt"), "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551")
+            && fileMatches(Path.Combine(directory, "sevenZip.exe"), "7ddf0a3bc451e166679296be630d6f0573eb386159c04184761c43020c484291");
+    }
+
+    private static bool fileMatches(string path, string digest)
+    {
+        ensurePlainPath(path);
+        if (!File.Exists(path)) return false;
+        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var sha = SHA256.Create())
+            return String.Equals(BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", ""), digest, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void publishArchiveFile(string source, string destination)
+    {
+        ensurePlainPath(destination);
+        bool replace = File.Exists(destination);
+        var timer = Stopwatch.StartNew();
+        while (true)
+        {
+            ensurePlainPath(source);
+            ensurePlainPath(destination);
+            if ((File.GetAttributes(source) & FileAttributes.Directory) != 0 || Directory.Exists(destination))
+                throw new IOException("解压文件不能覆盖目录：" + source + " -> " + destination);
+            if (replace && (File.GetAttributes(destination) & FileAttributes.ReadOnly) != 0)
+                throw new UnauthorizedAccessException("无法覆盖只读文件：" + destination);
+            try
+            {
+                if (replace) File.Replace(source, destination, null);
+                else File.Move(source, destination);
+                return;
+            }
+            catch (IOException error)
+            {
+                int code = error.HResult & 0xffff;
+                // ACT: 每个文件的短暂占用最多等待10秒；1175保留双方原名，1176/1177可能改变文件状态，不能重试。
+                if ((code != 32 && code != 33 && !(replace && code == 1175))
+                    || timer.Elapsed.TotalSeconds >= 10 || !File.Exists(source) || (replace && !File.Exists(destination)))
+                    throw new IOException("无法发布解压文件：" + source + " -> " + destination
+                        + "（0x" + error.HResult.ToString("X8") + "）：" + error.Message, error);
+                Thread.Sleep(200);
+            }
+        }
+    }
+
+    private static void downloadArchiveFile(string address, string path, long size, string digest, Stopwatch timer)
+    {
+        var uri = new Uri(address);
+        var fileTimer = Stopwatch.StartNew();
+        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+        for (int redirect = 0; redirect <= 5; redirect++)
+        {
+            if (uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0
+                || (uri.Host != "github.com" && uri.Host != "release-assets.githubusercontent.com" && uri.Host != "raw.githubusercontent.com"))
+                throw new InvalidOperationException("解压工具下载地址无效。");
+            int remaining = (int)Math.Min(300000 - fileTimer.ElapsedMilliseconds, 600000 - timer.ElapsedMilliseconds);
+            if (remaining <= 0) throw new TimeoutException("解压工具下载超时，请检查网络后重试。");
+            var request = (HttpWebRequest)WebRequest.Create(uri);
+            request.AllowAutoRedirect = false;
+            request.Timeout = remaining;
+            request.ReadWriteTimeout = remaining;
+            request.UserAgent = "Toonflow";
+            using (var timeout = new System.Threading.Timer(value => request.Abort(), null, remaining, Timeout.Infinite))
+            using (var response = (HttpWebResponse)request.GetResponse())
+            {
+                int status = (int)response.StatusCode;
+                if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)
+                {
+                    uri = new Uri(uri, response.Headers[HttpResponseHeader.Location]);
+                    continue;
+                }
+                if (status != 200 || (response.ContentLength >= 0 && response.ContentLength != size))
+                    throw new InvalidOperationException("解压工具下载内容不匹配。");
+                using (var input = response.GetResponseStream())
+                using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    byte[] buffer = new byte[81920];
+                    long received = 0;
+                    int count;
+                    while ((count = input.Read(buffer, 0, buffer.Length)) != 0)
+                    {
+                        received += count;
+                        if (received > size) throw new InvalidOperationException("解压工具下载内容过大。");
+                        output.Write(buffer, 0, count);
+                    }
+                    if (received != size) throw new InvalidOperationException("解压工具下载不完整。");
+                    output.Flush(true);
+                }
+                if (!fileMatches(path, digest)) throw new InvalidOperationException("解压工具 SHA-256 校验失败。");
+                return;
+            }
+        }
+        throw new InvalidOperationException("解压工具下载重定向过多。");
+    }
+
+    private static string readToolOutput(StreamReader reader)
+    {
+        var result = new StringBuilder();
+        var buffer = new char[2048];
+        int count;
+        while ((count = reader.Read(buffer, 0, buffer.Length)) > 0)
+            if (result.Length <= 65536) result.Append(buffer, 0, Math.Min(count, 65537 - result.Length));
+        return result.ToString();
+    }
+
+    private static string runArchiveTool(string tool, string arguments, int timeout)
+    {
+        using (var process = Process.Start(new ProcessStartInfo(tool, arguments)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
+            RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = utf8,
+            StandardErrorEncoding = utf8,
             WindowStyle = ProcessWindowStyle.Hidden
         }))
         {
-            string error = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            if (process.ExitCode != 0) throw new InvalidOperationException("更新包解压失败：" + error);
+            if (process == null) throw new InvalidOperationException("无法启动解压工具。");
+            var output = Task.Factory.StartNew(() => readToolOutput(process.StandardOutput));
+            var error = Task.Factory.StartNew(() => readToolOutput(process.StandardError));
+            try
+            {
+                if (!process.WaitForExit(timeout)) throw new TimeoutException("解压工具执行超时。");
+                if (!Task.WaitAll(new Task[] { output, error }, 5000)) throw new TimeoutException("读取解压工具输出超时。");
+                if (process.ExitCode != 0) throw new InvalidOperationException("更新包解压失败：" + error.Result);
+                if (output.Result.Length > 65536) throw new InvalidOperationException("解压工具输出过大。");
+                return output.Result;
+            }
+            finally
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                    process.WaitForExit(5000);
+                }
+            }
+        }
+    }
+
+    private static void extract(string tool, string archive, string stage, string archiveRoot)
+    {
+        ensurePlainTree(stage);
+        if (samePath(tool, systemTar()))
+        {
+            runArchiveTool(tool, "-xf " + quote(archive) + " -C " + quote(stage) + " --strip-components=1", 600000);
+            return;
+        }
+        string unpack = Path.Combine(Path.GetDirectoryName(archive), "unpack" + Guid.NewGuid().ToString("N"));
+        if (!CreateDirectoryW(unpack, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法创建独立的解压目录。");
+        try
+        {
+            ensurePlainPath(unpack);
+            runArchiveTool(tool, "x -ttar -y -bso0 -bsp0 " + quote(archive) + " -o" + quote(unpack), 600000);
+            ensurePlainTree(unpack);
+            string source = Path.Combine(unpack, archiveRoot);
+            if (Directory.GetFileSystemEntries(unpack).Length != 1 || !Directory.Exists(source))
+                throw new InvalidOperationException("更新包必须只有一个顶层目录且不能重复路径。");
+            mergeArchiveDirectory(source, stage);
+        }
+        finally
+        {
+            ensurePlainTree(unpack);
+            Directory.Delete(unpack, true);
+        }
+    }
+
+    private static void mergeArchiveDirectory(string source, string destination)
+    {
+        ensurePlainPath(destination);
+        Directory.CreateDirectory(destination);
+        foreach (string path in Directory.EnumerateFileSystemEntries(source))
+        {
+            string target = Path.Combine(destination, Path.GetFileName(path));
+            ensurePlainPath(target);
+            if (Directory.Exists(path)) mergeArchiveDirectory(path, target);
+            else publishArchiveFile(path, target);
         }
     }
 
@@ -400,7 +755,7 @@ internal static class updateHelper
         }
     }
 
-    private static void validateTar(Stream stream)
+    private static string validateTar(Stream stream)
     {
         byte[] header = new byte[512];
         var entries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -419,7 +774,7 @@ internal static class updateHelper
                 while ((count = stream.Read(tail, 0, tail.Length)) > 0)
                     for (int index = 0; index < count; index++)
                         if (tail[index] != 0) throw new InvalidOperationException("更新 TAR 包含附加内容。");
-                return;
+                return rootName;
             }
             long checksum = 0;
             for (int index = 0; index < header.Length; index++) checksum += index >= 148 && index < 156 ? 32 : header[index];

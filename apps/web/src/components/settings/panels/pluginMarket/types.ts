@@ -15,7 +15,9 @@ export interface Plugin {
   readme?: string;
   github?: string;
   version?: string;
+  installedAt?: number;
   enabled?: boolean;
+  builtin?: boolean;
   canConfigure?: boolean;
   canManage?: boolean;
   configRules?: Raw<Rule[]>;

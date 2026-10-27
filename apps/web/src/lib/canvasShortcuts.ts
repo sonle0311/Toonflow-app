@@ -1,4 +1,6 @@
-const isMac = globalThis.navigator?.platform?.includes("Mac") ?? false;
+import { isMac } from "./platform";
+import { t } from "@toonflow/i18n/vue";
+
 const primaryModifier = isMac ? "Meta" : "Ctrl";
 const modifiers = ["Ctrl", "Alt", "Shift", "Meta"];
 
@@ -11,6 +13,8 @@ export const defaultCanvasShortcuts = {
   duplicateOnDrag: isMac ? "Alt+Meta" : "Ctrl+Alt",
   pan: "Space",
   zoom: "Ctrl",
+  selection: "None",
+  multiSelection: "",
   moveTool: "KeyV",
   handTool: "KeyH",
   arrange: "Alt+Shift+KeyF",
@@ -31,7 +35,8 @@ export const canvasShortcutFields: {
   id: CanvasShortcutAction;
   label: string;
   hold?: boolean;
-  gesture?: "drag" | "wheel";
+  allowNone?: boolean;
+  gesture?: "drag" | "wheel" | "click";
 }[] = [
   { id: "group", label: "成组" },
   { id: "mergeGroup", label: "合并分组" },
@@ -42,8 +47,10 @@ export const canvasShortcutFields: {
   { id: "zoomIn", label: "放大" },
   { id: "zoomOut", label: "缩小" },
   { id: "fitView", label: "适应画布" },
-  { id: "zoom", label: "鼠标滚轮", hold: true, gesture: "wheel" },
-  { id: "pan", label: "键盘与鼠标", hold: true },
+  { id: "zoom", label: "滚轮缩放", hold: true, gesture: "wheel", allowNone: true },
+  { id: "pan", label: "画布平移", hold: true, allowNone: true },
+  { id: "selection", label: "框选节点", hold: true, allowNone: true },
+  { id: "multiSelection", label: "追加选择", hold: true, gesture: "click" },
   { id: "moveTool", label: "移动" },
   { id: "handTool", label: "抓手工具" },
   { id: "arrange", label: "整理画布" },
@@ -52,10 +59,11 @@ export const canvasShortcutFields: {
   { id: "search", label: "画布节点搜索" },
   { id: "delete", label: "删除" },
   { id: "copy", label: "复制到剪贴板" },
-  { id: "paste", label: "粘贴节点、文本或媒体" },
+  { id: "paste", label: "粘贴" },
 ];
 
 const keyLabels: Record<string, string> = {
+  None: "无需按键",
   Ctrl: "Ctrl", Alt: "Alt", Shift: "Shift", Meta: isMac ? "⌘" : "Win",
   Space: "Space", Escape: "Esc", Enter: "Enter", Tab: "Tab", Backspace: "⌫", Delete: "Delete",
   ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓",
@@ -75,7 +83,9 @@ export function normalizeShortcut(value: string): string | undefined {
 }
 
 function normalizeBinding(value: string): string | undefined {
+  if (value.trim() === "None") return "None";
   const parts = value.split("+").map(part => part.trim());
+  if (parts.includes("None")) return;
   if (new Set(parts).size !== parts.length) return;
   const keys = parts.filter(part => !modifiers.includes(part));
   if (keys.length > 1 || keys.some(key => !Object.hasOwn(keyLabels, key) && !/^(?:Key[A-Z]|Digit\d|Numpad\d|F(?:[1-9]|1\d|2[0-4]))$/.test(key))) return;
@@ -91,7 +101,7 @@ export function isModifierShortcut(binding: string) {
 }
 
 export function isShortcutAllowed(field: typeof canvasShortcutFields[number], binding: string) {
-  return getShortcutBindings(binding).every(value => field.gesture === "drag"
+  return getShortcutBindings(binding).every(value => value === "None" ? field.allowNone === true : field.gesture === "drag" || field.gesture === "click"
     ? isModifierShortcut(value) : field.hold || !isModifierShortcut(value));
 }
 
@@ -107,6 +117,7 @@ export function shortcutMatches(event: KeyboardEvent, binding: string) {
 
 export function shortcutPressed(event: Pick<KeyboardEvent, "ctrlKey" | "altKey" | "shiftKey" | "metaKey">, binding: string, pressedCodes: ReadonlySet<string>) {
   return getShortcutBindings(binding).some(value => {
+    if (value === "None") return true;
     const parts = value.split("+");
     if (event.ctrlKey !== parts.includes("Ctrl") || event.altKey !== parts.includes("Alt")
       || event.shiftKey !== parts.includes("Shift") || event.metaKey !== parts.includes("Meta")) return false;
@@ -117,5 +128,5 @@ export function shortcutPressed(event: Pick<KeyboardEvent, "ctrlKey" | "altKey" 
 
 export function shortcutLabel(binding: string) {
   return getShortcutBindings(binding).map(value => value.split("+")
-    .map(part => keyLabels[part] ?? part.replace(/^(?:Key|Digit)/, "").replace(/^Numpad/, "小键盘 ")).join(" + ")).join(" / ");
+    .map(part => keyLabels[part] ?? (part.startsWith("Numpad") ? t`小键盘 ${part.slice(6)}` : part.replace(/^(?:Key|Digit)/, ""))).join(" + ")).join(" / ");
 }

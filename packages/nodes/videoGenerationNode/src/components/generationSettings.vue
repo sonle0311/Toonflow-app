@@ -1,10 +1,10 @@
 <template>
-  <el-popover trigger="click" placement="top-start" width="min(340px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '14px' }">
+  <el-popover v-model:visible="settingsVisible" trigger="click" placement="top-start" width="min(340px, calc(100vw - 24px))" :disabled="disabled" :showArrow="false" :popperStyle="{ padding: '14px' }">
     <template #reference>
-      <el-button class="settingsButton" text size="small" :disabled="disabled" aria-label="视频生成设置">
+      <el-button class="settingsButton" text size="small" :disabled="disabled" :aria-expanded="settingsVisible" aria-label="视频生成设置">
         <span class="ratioShape" :style="ratioStyle(ratio)" aria-hidden="true" />
         <span>{{ [ratio, resolution, duration ? `${duration}秒` : ''].filter(Boolean).join(' · ') }}</span>
-        <icon-chevron-up :size="14" aria-hidden="true" />
+        <component :is="settingsVisible ? IconChevronDown : IconChevronUp" :size="14" aria-hidden="true" />
       </el-button>
     </template>
     <div class="generationSettings nodrag nopan nowheel" @pointerdown.stop @mousedown.stop @dblclick.stop @keydown.stop @wheel.stop>
@@ -39,22 +39,26 @@
         <span class="sectionLabel">生成音频</span>
         <el-switch v-model="generateAudio" :disabled="disabled" aria-label="生成音频" />
       </div>
+      <modelForm v-model="other" :rules="model?.rules" :disabled="disabled" />
     </div>
   </el-popover>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { ElButton, ElPopover, ElSelect, ElOption, ElSwitch } from "element-plus";
-import { IconChevronUp } from "@tabler/icons-vue";
+import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
+import modelForm from "@toonflow/node-shared/modelForm";
 
 const props = defineProps<{ model?: NodeMediaModel; disabled?: boolean; ratios: string[] }>();
+const settingsVisible = ref(false);
 const duration = defineModel<number | undefined>("duration", { required: true });
 const resolution = defineModel<string>("resolution", { required: true });
 const ratio = defineModel<string>("ratio", { required: true });
 const mode = defineModel<string>("mode", { required: true });
 const generateAudio = defineModel<boolean>("generateAudio", { required: true });
+const other = defineModel<Record<string, unknown>>("other", { required: true });
 const modeLabels: Record<string, string> = {
   text: "文生视频", singleImage: "单图参考", startEndRequired: "首尾帧必填", endFrameOptional: "尾帧可选", startFrameOptional: "首帧可选",
 };
