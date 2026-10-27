@@ -1,4 +1,4 @@
-// ACT: 完整 ID 优先，其次匹配规范化名称和有限别名；两项上限均优先于用户配置和 Pi 内置模型目录。
+// ACT: 离线备用目录，按完整 ID、规范化名称和有限别名匹配；用户配置与 models.dev 数据优先。
 // 单位为 token；原有条目于 2026-09-20 核对，新增条目于 2026-10-26 核对官方标准 API 上限。
 const modelContextLimits: { id: string | RegExp; contextWindow: number; maxTokens: number }[] = [
   // TF-Router

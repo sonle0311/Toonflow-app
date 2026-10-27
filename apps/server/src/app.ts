@@ -43,6 +43,8 @@ export async function createApp({
   const { default: conf } = await import("@/utils/conf");
   const { initializeNetwork } = await import("@/utils/network");
   await initializeNetwork();
+  const { initializeModelCatalog } = await import("@/utils/ai/modelCatalog");
+  await initializeModelCatalog();
   setLocaleFallback(() => normalizeLocale((conf.get("settings", {}).ui as { language?: unknown } | undefined)?.language)
     ?? detectLocale([Intl.DateTimeFormat().resolvedOptions().locale]));
   if (dataDirectory && toolsRoot)

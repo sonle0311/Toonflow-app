@@ -540,7 +540,7 @@ export async function getAgentSession(cwd: string, path: string) {
     name: history.getSessionName() || (firstUserMessage?.content.trim() || firstUserMessage?.attachments?.[0]?.name)?.slice(0, 60) || translateMessage("新对话"),
     messages,
     stats: getAgentStats(history),
-    contextUsage: getAgentContext(history, active?.session?.model?.contextWindow ?? (configuredModel && model ? getModelLimits(model.provider, configuredModel).contextWindow : 0)),
+    contextUsage: getAgentContext(history, active?.session?.model?.contextWindow ?? (configuredModel && model && provider.success ? getModelLimits(model.provider, configuredModel, provider.data.apiUrl).contextWindow : 0)),
     providerId: model?.provider,
     modelId: model?.modelId,
     thinkingLevel: reasoningSelection.success ? reasoningSelection.data.thinkingLevel ?? undefined : context.thinkingLevel,

@@ -8,6 +8,7 @@ import { z } from "zod";
 import conf from "@/utils/conf";
 import { readReference } from "@/utils/media/generation";
 import { findModelContextLimits } from "@/utils/ai/modelContextLimits";
+import { getCatalogModelLimits } from "@/utils/ai/modelCatalog";
 import { createFileTransport, getUnsupportedFileText, type FileProvider } from "@/utils/ai/files";
 import { getRequestFiles } from "@/utils/ai/requestFiles";
 import { readFile, stat } from "@toonflow/file";
@@ -71,12 +72,9 @@ export function getModelReasoning(providerId: string, model: z.infer<typeof prov
   return { reasoning, thinkingLevelMap, reasoningLevels, compat };
 }
 
-export function getModelLimits(providerId: string, model: z.infer<typeof providerSchema>["models"][number]) {
+export function getModelLimits(providerId: string, model: z.infer<typeof providerSchema>["models"][number], apiUrl?: string) {
+  const catalog = getCatalogModelLimits(providerId, model.id, apiUrl);
   const limits = findModelContextLimits(model.id);
-  if (limits) return { contextWindow: limits.contextWindow, maxTokens: limits.maxTokens };
-  if (model.contextWindow != null && model.maxOutputTokens != null) {
-    return { contextWindow: model.contextWindow, maxTokens: model.maxOutputTokens };
-  }
   const matches = builtinModels.filter(item => item.id === model.id);
   const exact = matches.find(item => item.provider === providerId);
   const candidates = exact ? [exact] : matches;
@@ -84,8 +82,8 @@ export function getModelLimits(providerId: string, model: z.infer<typeof provide
   const contextWindow = candidates.every(item => item.contextWindow === candidates[0]?.contextWindow) ? candidates[0]?.contextWindow : undefined;
   const maxTokens = candidates.every(item => item.maxTokens === candidates[0]?.maxTokens) ? candidates[0]?.maxTokens : undefined;
   return {
-    contextWindow: model.contextWindow ?? contextWindow ?? 262144,
-    maxTokens: model.maxOutputTokens ?? maxTokens ?? 32768,
+    contextWindow: model.contextWindow ?? catalog?.contextWindow ?? limits?.contextWindow ?? contextWindow ?? 262144,
+    maxTokens: model.maxOutputTokens ?? catalog?.maxTokens ?? limits?.maxTokens ?? maxTokens ?? 32768,
   };
 }
 
@@ -99,7 +97,7 @@ export function getConfiguredModel(providerId: string, modelId: string) {
   const baseUrl = new URL(provider.apiUrl);
   if (baseUrl.pathname === "/") baseUrl.pathname = "/v1";
   if (provider.protocol === "anthropic-messages") baseUrl.pathname = baseUrl.pathname.replace(/\/v1\/*$/, "");
-  const limits = getModelLimits(providerId, model);
+  const limits = getModelLimits(providerId, model, provider.apiUrl);
   return { provider, model: { ...model, ...getModelReasoning(providerId, model, provider.protocol), contextWindow: limits.contextWindow, maxOutputTokens: limits.maxTokens }, baseUrl: baseUrl.href.replace(/\/+$/, "") };
 }
 
@@ -111,7 +109,7 @@ export function listAiModels() {
     if (!parsed.success) return [];
     const provider = parsed.data;
     return provider.models.filter(model => model.id.trim()).map(model => {
-      const limits = getModelLimits(provider.id, model);
+      const limits = getModelLimits(provider.id, model, provider.apiUrl);
       return {
         providerId: provider.id, providerLabel: provider.label, protocol: provider.protocol, modelId: model.id, label: model.label,
         contextWindow: limits.contextWindow, maxOutputTokens: limits.maxTokens,
