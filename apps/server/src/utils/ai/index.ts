@@ -98,6 +98,7 @@ export function getConfiguredModel(providerId: string, modelId: string) {
   if (!model) throw Object.assign(new Error("所选模型不存在，请重新选择"), { status: 400 });
   const baseUrl = new URL(provider.apiUrl);
   if (baseUrl.pathname === "/") baseUrl.pathname = "/v1";
+  if (provider.protocol === "anthropic-messages") baseUrl.pathname = baseUrl.pathname.replace(/\/v1\/*$/, "");
   const limits = getModelLimits(providerId, model);
   return { provider, model: { ...model, ...getModelReasoning(providerId, model, provider.protocol), contextWindow: limits.contextWindow, maxOutputTokens: limits.maxTokens }, baseUrl: baseUrl.href.replace(/\/+$/, "") };
 }

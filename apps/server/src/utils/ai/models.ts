@@ -12,6 +12,9 @@ const modelSchema = z.object({
 export async function fetchProviderModels({ apiUrl, protocol, apiKey, providerId }: { apiUrl: string; protocol: string; apiKey: string; providerId?: string }) {
   const url = new URL(apiUrl);
   if (url.pathname === "/") url.pathname = "/v1";
+  if (protocol === "anthropic-messages" && !/\/v1\/*$/.test(url.pathname)) {
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/v1`;
+  }
   url.pathname = `${url.pathname.replace(/\/+$/, "")}/models`;
   const headers: Record<string, string> = { Accept: "application/json" };
   if (protocol === "anthropic-messages") {
