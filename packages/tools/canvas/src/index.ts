@@ -18,7 +18,10 @@ const plugin: ToolPlugin = {
       description: operation.description,
       promptSnippet: "通过运行中的画布操作工具控制激活画布，不要直接修改画布 JSON。",
       promptGuidelines,
-      parameters: z.toJSONSchema(operation.parameters, { io: "input", target: "draft-07" }),
+      // ACT: Anthropic SDK 非严格协议会丢弃根 definitions；仅开放 args 的对外描述，执行仍用原 schema 校验 JSON。
+      parameters: z.toJSONSchema(operation.name === "nodeTools"
+        ? operation.parameters.extend({ args: z.record(z.string(), z.unknown()).describe("按 getNodeTools 返回的 parameters 填写；保留 JSON 类型，数字、布尔值、数组和对象不能改成字符串") })
+        : operation.parameters, { io: "input", target: "draft-07" }),
       executionMode: "sequential",
       async execute(_id, params, signal) {
         const result = await canvas.call({ name: operation.name, args: operation.parameters.parse(params) }, signal);
