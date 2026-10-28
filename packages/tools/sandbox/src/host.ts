@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ToolContext } from "@toonflow/tools-scaffold/runtime";
 import { sandboxRequestSchema } from "./schema";
@@ -67,6 +68,9 @@ export function createSandboxContext({ files, resolvePath }: Pick<ToolContext, "
             signal?.throwIfAborted();
             const content = result.files.find(output => output.path === file.path)?.content;
             if (content === undefined) throw new Error(`沙盒未返回输出文件：${file.path}`);
+            const parent = posix.dirname(file.target);
+            if (parent !== ".") await files.mkdir(parent, true);
+            signal?.throwIfAborted();
             await files.writeFile(file.target, Buffer.from(content, "base64"), !file.overwrite);
             exported.push(file.target);
           }
@@ -80,6 +84,8 @@ export function createSandboxContext({ files, resolvePath }: Pick<ToolContext, "
         exitCode: result.exitCode,
         exported,
       };
+      // ACT: SDK 仅将抛错标为工具失败；错误消息保留完整执行结果。
+      if (result.exitCode !== 0) throw new Error(JSON.stringify(details));
       return { content: [{ type: "text", text: JSON.stringify(details) }], details };
     },
   };

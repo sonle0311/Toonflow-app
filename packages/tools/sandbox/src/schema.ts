@@ -13,11 +13,11 @@ export const sandboxRequestSchema = z.object({
   }).strict()).max(32).optional().describe("在本次沙盒中创建的文本文件"),
   imports: z.array(z.object({
     path: z.string().min(1).max(4096).describe("工作区相对文件路径，或 skillOperator 返回的全局技能文件绝对路径"),
-    target: relativePathSchema.describe("导入后相对于虚拟 /workspace 的文件路径"),
+    target: relativePathSchema.describe("导入后相对于虚拟 /workspace 的文件路径；脚本必须读取 target，例如 target=input.md 时读取 input.md，而不是原始 path"),
   }).strict()).max(32).optional().describe("本次运行需要读取的文件；不会自动导入整个目录或脚本依赖"),
   exports: z.array(z.object({
     path: relativePathSchema.describe("待导出的文件，相对于虚拟 /workspace"),
-    target: relativePathSchema.describe("保存位置，相对于当前工作区"),
+    target: relativePathSchema.describe("保存位置，相对于当前真实工作区；命令成功后自动创建缺失的父目录，沙盒内 mkdir 不会创建真实工作区目录"),
     overwrite: z.boolean().optional().default(false).describe("是否允许覆盖已有工作区文件，默认只允许新建"),
   }).strict()).max(32).optional().describe("仅在命令成功后写回工作区的文件；未列出的文件随本次沙盒销毁"),
   timeoutMs: z.number().int().min(1).max(60000).optional().default(30000).describe("执行超时，单位毫秒，默认 30000，最多 60000"),

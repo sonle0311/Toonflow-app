@@ -93,7 +93,32 @@ export const nodeTools = {
       nodeId, name, description: definition.description.trim(),
       parameters,
       async execute(args, context) {
-        const parsed = await definition.parameters.parseAsync(args);
+        const result = await definition.parameters.safeParseAsync(args);
+        let parsed: z.output<Schema>;
+        if (result.success) parsed = result.data;
+        else {
+          let normalized: Record<string, unknown> | undefined;
+          if (args && typeof args === "object" && !Array.isArray(args)) {
+            const values = args as Record<string, unknown>;
+            // ACT: 仅兼容顶层数字/布尔值的 JSON 字符串；不转换容器或猜业务值，完整 schema 仍负责范围与约束。
+            for (const issue of result.error.issues) {
+              if (issue.code !== "invalid_type" || issue.path.length !== 1 || typeof issue.path[0] !== "string"
+                || !["number", "boolean"].includes(issue.expected)) continue;
+              const field = issue.path[0];
+              if (!Object.hasOwn(values, field) || typeof values[field] !== "string") continue;
+              try {
+                const value: unknown = JSON.parse(values[field]);
+                if ((issue.expected === "number" && typeof value === "number" && Number.isFinite(value))
+                  || (issue.expected === "boolean" && typeof value === "boolean")) {
+                  normalized ??= { ...values };
+                  normalized[field] = value;
+                }
+              } catch { /* 非 JSON 标量仍返回原校验错误。 */ }
+            }
+          }
+          if (!normalized) throw result.error;
+          parsed = await definition.parameters.parseAsync(normalized);
+        }
         context.signal?.throwIfAborted();
         return definition.execute(parsed, context);
       },
@@ -129,10 +154,10 @@ export function useNodeToolsContext() {
       const timeout = AbortSignal.timeout(120000);
       const callSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
       callSignal.throwIfAborted();
+      if (!flow.findNode(nodeId)) throw new Error(`Node ${nodeId} is not on the active canvas. Use getCanvas, switchCanvas if needed, then getNodeTools before retrying.`);
       const key = `${nodeId}:${name}`;
       const entry = registry.get(key);
       if (!entry) throw new Error(`节点未注册函数 ${name}，请先通过 getNodeTools 查询可用节点函数`);
-      if (!flow.findNode(nodeId)) throw new Error("节点函数已卸载或不属于本轮画布");
       let cancel: () => void = () => {};
       try {
         const result = await Promise.race([
