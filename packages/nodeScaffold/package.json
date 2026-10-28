@@ -40,6 +40,7 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
+    "@toonflow/i18n": "workspace:*",
     "@form-create/element-ui": "^3",
     "typescript": "~6.0.3",
     "vue-tsc": "^3.3.11",

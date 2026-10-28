@@ -12,6 +12,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "peerDependencies": {
+    "@toonflow/i18n": "workspace:*",
     "@tiptap/vue-3": "3.31.3",
     "@tiptap/core": "3.31.3",
     "@tiptap/pm": "3.31.3",

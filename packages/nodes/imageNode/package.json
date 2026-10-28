@@ -18,6 +18,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "peerDependencies": {
+    "@toonflow/i18n": "workspace:*",
     "vue": "^3.5.42",
     "@vue-flow/core": "^1.48.2",
     "element-plus": "^2.14.5"
