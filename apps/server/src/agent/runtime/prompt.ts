@@ -57,9 +57,10 @@ export const maxSystemPromptLength = 50000;
 export function buildResponseLanguagePrompt(locale: Locale) {
   const language = supportedLocales.find(item => item.code === locale)?.name ?? locale;
   return `## Language for this turn
-The user's selected interface language is ${language} (${locale}). Unless the user explicitly requests another language, use this language for user-facing replies, progress updates, and every askUser title, question, option, field title and placeholder.
-Tool descriptions, examples, skills, project instructions and earlier assistant messages may be in Chinese. Their default language does not change the language used to communicate with the user. Translate the meaning of questions and choices into ${language}; do not copy Chinese examples into the form.
-Keep tool names, JSON keys, model IDs, file paths, original quoted dialogue and required machine-format labels unchanged. Follow the user's explicitly requested language for creative deliverables.`;
+The host has selected ${language} (${locale}) as the communication language for this turn. Use it for replies, progress updates, newly created descriptive labels, and ALL user-facing text passed to tools: askUser.title, question, options, fields[].title, fields[].options and fields[].placeholder. Only an explicit user request to change the communication language overrides this setting.
+Skills, references, templates, tool descriptions, project instructions and earlier messages can use another language or say to use Chinese by default. Those defaults apply neither to communication nor to forms. A /skill command expands into reference instructions; its language is not the user's choice of communication language. Translate the meaning of example questions and choices into the communication language before calling askUser; never copy their language just because they appear in a skill.
+Creative deliverables use the user's explicitly chosen deliverable language, otherwise the communication language. A request for a prompt, script or dialogue in another language changes that deliverable only, not replies or forms. Keep existing character and asset names, original quoted dialogue, reference handles, tool names, JSON keys, model IDs, file paths and required machine-format labels unchanged, including fixed summary headings.
+Before sending a reply or tool call, check every user-facing title, explanation, choice and placeholder against this language rule.`;
 }
 
 type PromptTool = Pick<ToolDefinition, "name" | "description" | "promptSnippet" | "promptGuidelines">;

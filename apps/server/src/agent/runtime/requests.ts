@@ -7,8 +7,9 @@ import type { AgentImageReference } from "@/agent/runtime/imageAttachments";
 import { getAgentTaskId } from "@/agent/runtime/sessions";
 import { getRequestFiles, type RequestFile } from "@/utils/ai/requestFiles";
 import { createFileTransport, FileRequestLimitError } from "@/utils/ai/files";
+import { buildResponseLanguagePrompt } from "@/agent/runtime/prompt";
 import conf from "@/utils/conf";
-import { t } from "@/lib/i18n";
+import { getLocale, t } from "@/lib/i18n";
 
 function contentHash(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -20,6 +21,8 @@ export function configureAgentRequests(session: AgentSession, limits?: { maxRequ
   }
   const history = session.sessionManager;
   const cwd = history.getCwd();
+  const responseLocale = getLocale();
+  const languagePrompt = buildResponseLanguagePrompt(responseLocale);
   function wakeRetryForSteering() {
     if (!runSignal?.aborted && session.isRetrying && session.agent.getQueuedMessages().steering.some(message => message.role === "user"
       || (message.role === "custom" && message.customType === "agentMessage"))) {
@@ -180,6 +183,14 @@ export function configureAgentRequests(session: AgentSession, limits?: { maxRequ
           }
           const requestContext = {
             ...context,
+            // ACT: 仅调整发出的请求，技能与项目规则之后再次声明本轮语言，不改写历史或技能原文。
+            systemPrompt: context.systemPrompt?.includes(languagePrompt)
+              ? `${context.systemPrompt.replace(languagePrompt, "").trimEnd()}\n\n${languagePrompt}`
+              : context.systemPrompt,
+            tools: context.tools?.map(tool => tool.name === "askUser" ? {
+              ...tool,
+              description: `${tool.description}\nUnless the user explicitly changes the communication language, write every title, question, option and field placeholder in the host-selected communication language (${responseLocale}). Translate skill examples into that language. A separate language requested for a creative deliverable does not change the form language. Preserve existing names and technical identifiers.`,
+            } : tool),
             messages: messages.flatMap((message, index) => {
               if (message.role !== "assistant" || !invalidThinking.has(contentHash(context.messages[index]))) return [message];
               const content = message.content.filter(part => part.type !== "thinking");
