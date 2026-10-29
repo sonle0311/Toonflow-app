@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { basename } from "node:path";
 import { readFile, stat, unlink } from "@toonflow/file";
+import { clampMaxTokensToContext } from "@earendil-works/pi-ai/api/simple-options";
+import type { Context, Usage } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
   SessionManager,
@@ -15,6 +17,7 @@ import { createAgentTools } from "@/agent/tools";
 import { createAgentResources } from "@/agent/runtime/resources";
 import { createAgentModel, getAgentModelConfiguration } from "@/agent/runtime/model";
 import { configureAgentRequests } from "@/agent/runtime/requests";
+import { addUsage, emptyUsage } from "@/agent/runtime/subAgent";
 import { configureAgentDelivery } from "@/agent/runtime/delivery";
 import { getAgentImageReference, getOffloadedImageText, readAgentImage } from "@/agent/runtime/imageAttachments";
 import { createSubAgentTool } from "@/agent/tools/subAgent";
@@ -250,12 +253,14 @@ export async function run(
     active.session = session;
 
     let compactionError: string | undefined;
+    const compactionRetries = new WeakMap<Context, { retries: number; maxTokens: number; usage: Usage }>();
     const streamFunction = session.agent.streamFunction;
     session.agent.streamFunction = async (...args) => {
       const compacting = session.isCompacting;
       if (!compacting && compactionError) throw new Error(compactionError);
+      if (!compacting) return streamFunction(...args);
       // ACT: 此型号强制推理且未声明 effort 时默认 max；仅摘要使用 adaptive low，普通回复保留用户档位。
-      if (compacting && provider.protocol === "anthropic-messages" && model.id === "MiniMax-M3.1-Flash") {
+      if (provider.protocol === "anthropic-messages" && model.id === "MiniMax-M3.1-Flash") {
         args[0] = {
           ...args[0], reasoning: true,
           thinkingLevelMap: { ...args[0].thinkingLevelMap, low: "low" },
@@ -263,15 +268,47 @@ export async function run(
         };
         args[2] = { ...args[2], reasoning: "low" };
       }
-      const stream = await streamFunction(...args);
-      // ACT: 摘要落盘前拒绝空正文，压缩、重试和普通回复仍由 SDK 处理。
-      if (compacting) {
+      let recovery = compactionRetries.get(args[1]);
+      if (!recovery) {
+        recovery = { retries: 0, maxTokens: args[2]?.maxTokens ?? args[0].maxTokens, usage: emptyUsage() };
+        compactionRetries.set(args[1], recovery);
+      }
+      args[2] = { ...args[2], maxTokens: recovery.maxTokens };
+      for (;;) {
+        signal?.throwIfAborted();
+        args[2]?.signal?.throwIfAborted();
+        const stream = await streamFunction(...args);
         const response = await stream.result();
+        signal?.throwIfAborted();
+        args[2]?.signal?.throwIfAborted();
+        const inputTokens = response.usage.input + response.usage.cacheRead + response.usage.cacheWrite;
+        addUsage(recovery.usage, response.usage);
+        for (const key of ["reasoning", "cacheWrite1h"] as const) {
+          if (response.usage[key] !== undefined) recovery.usage[key] = (recovery.usage[key] ?? 0) + response.usage[key];
+        }
+        // ACT: 只重试被截断的这一段摘要，最多追加两次；正文与工具不重跑，缓存输入也计入窗口。
+        if (response.stopReason === "length" && recovery.retries < 2) {
+          const currentMaxTokens = recovery.maxTokens;
+          const nextMaxTokens = Math.min(
+            args[0].maxTokens,
+            clampMaxTokensToContext(args[0], args[1], currentMaxTokens * 2),
+            inputTokens > 0 ? Math.max(1, args[0].contextWindow - inputTokens - 4096) : args[0].maxTokens,
+          );
+          if (nextMaxTokens > currentMaxTokens) {
+            recovery.retries++;
+            recovery.maxTokens = nextMaxTokens;
+            console.warn("[agent] Retrying truncated summary", { model: args[0].id, retry: recovery.retries, maxTokens: nextMaxTokens });
+            args[2] = { ...args[2], maxTokens: nextMaxTokens };
+            continue;
+          }
+        }
+        // ACT: 只把完整的最终摘要交 SDK 落盘，用量包含被截断的尝试。
         if (response.stopReason === "stop" && !response.content.some(part => part.type === "text" && part.text.trim())) {
           throw new Error("模型返回了空摘要，已保留原上下文");
         }
+        response.usage = recovery.usage;
+        return stream;
       }
-      return stream;
     };
 
     // ACT: 历史和本轮引用共用文件能力判断与协议转换，会话只保存工作区快照路径。
