@@ -4,6 +4,7 @@ import { readFile, stat, unlink } from "@toonflow/file";
 import {
   createAgentSession,
   SessionManager,
+  SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { CanvasContext, QuestionContext } from "@toonflow/tools-scaffold/runtime";
@@ -129,7 +130,7 @@ export async function run(
     send({ type: "accepted", runId: active.runId, message: { id: queueId, content: prompt.trim(), mode } });
     return;
   }
-  const { provider, runtime, effectiveThinkingLevel } = await createAgentModel(providerId, modelId, thinkingLevel);
+  const { provider, model, runtime, effectiveThinkingLevel } = await createAgentModel(providerId, modelId, thinkingLevel);
   if (sessionPath) {
     const file = await stat(sessionPath).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") throw Object.assign(new Error("会话不存在，请重新打开对话"), { status: 404 });
@@ -204,7 +205,10 @@ export async function run(
         onCanvasCancel: reason => { controller.abort(reason); onCanvasCancel?.(reason); },
       }),
     }));
-    const resources = await createAgentResources(cwd, tools, undefined, child
+    // ACT: 大窗口按 1/16 预留压缩与续答空间，上限 64K；小窗口最多预留 1/4，摘要输出仍受模型上限约束。
+    const reserveTokens = Math.min(65536, Math.max(1, Math.floor(model.contextWindow / 4)), Math.max(16384, Math.floor(model.contextWindow / 16)));
+    const settings = SettingsManager.inMemory({ compaction: { reserveTokens } });
+    const resources = await createAgentResources(cwd, tools, settings, child
       ? `## 子 Agent 职责\n你正在执行委派任务：${JSON.stringify({ file, name: child.name, task: child.task })}。遵守当前工作区规则与授权，用户可以进入此子会话补充要求。需要其他 Agent 配合时使用 listAgents 与 sendAgentMessage 直接沟通。重要进展与最终结论使用 report 上报父 Agent。`
       : "");
     const resendEntry = resendFrom ? history.getBranch().find((item) => item.id === resendFrom) : undefined;
@@ -245,9 +249,20 @@ export async function run(
     active.forgetQueuedMessage = delivery.forgetQueuedMessage;
     active.session = session;
 
+    let compactionError: string | undefined;
     const streamFunction = session.agent.streamFunction;
     session.agent.streamFunction = async (...args) => {
       const compacting = session.isCompacting;
+      if (!compacting && compactionError) throw new Error(compactionError);
+      // ACT: 此型号强制推理且未声明 effort 时默认 max；仅摘要使用 adaptive low，普通回复保留用户档位。
+      if (compacting && provider.protocol === "anthropic-messages" && model.id === "MiniMax-M3.1-Flash") {
+        args[0] = {
+          ...args[0], reasoning: true,
+          thinkingLevelMap: { ...args[0].thinkingLevelMap, low: "low" },
+          compat: { ...args[0].compat, forceAdaptiveThinking: true, supportsMidConvoEffort: false },
+        };
+        args[2] = { ...args[2], reasoning: "low" };
+      }
       const stream = await streamFunction(...args);
       // ACT: 摘要落盘前拒绝空正文，压缩、重试和普通回复仍由 SDK 处理。
       if (compacting) {
@@ -350,7 +365,6 @@ export async function run(
     let firstTokenAt: number | undefined;
     let modelError: string | undefined;
     let limited = false;
-    let compactionError: string | undefined;
     const toolBlocks = new Map<string, string>();
     const timing = { outputTokens: 0, decodeMs: 0 };
     session.subscribe((event) => {
@@ -359,8 +373,10 @@ export async function run(
       }
       if (event.type === "compaction_start" || event.type === "compaction_end") {
         send({ type: "compaction", active: event.type === "compaction_start" });
-        if (event.type === "compaction_end" && event.errorMessage) {
+        if (event.type === "compaction_end" && event.reason !== "manual" && !event.aborted && event.errorMessage) {
           compactionError = t`上下文压缩失败：${event.errorMessage}`;
+          // ACT: 只停当前内存会话，避免 SDK 在失败后继续请求满上下文或再次压缩；下次运行重新启用。
+          session.setAutoCompactionEnabled(false);
         }
       }
       if (event.type === "message_start" && event.message.role === "assistant") {
