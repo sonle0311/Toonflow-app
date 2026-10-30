@@ -11,6 +11,7 @@
         <el-button :icon="IconFolderPlus" :disabled="loading || editing || !listing || !!browseError" @click="manageEntry('mkdir')">新建文件夹</el-button>
       </div>
       <el-alert v-if="browseError" :title="browseError" type="error" :closable="false" />
+      <el-alert v-else-if="listing && !listing.path" title="请进入或新建项目文件夹，不能将服务器工作区根目录作为项目" type="info" :closable="false" />
       <el-table v-loading="loading" :data="listing?.entries ?? []" height="300" emptyText="当前目录为空">
         <el-table-column label="名称" minWidth="160">
           <template #default="{ row }">
@@ -28,7 +29,7 @@
     </div>
     <template #footer>
       <el-button :disabled="editing" @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :disabled="loading || editing || !listing || !!browseError" @click="confirmDirectory">选择此目录</el-button>
+      <el-button type="primary" :disabled="loading || editing || !listing?.path || !!browseError" @click="confirmDirectory">选择此目录</el-button>
     </template>
   </el-dialog>
 </template>
@@ -125,7 +126,11 @@ async function manageEntry(action: "mkdir" | "rename" | "remove", entry?: Worksp
         confirmButtonText: action === "mkdir" ? "创建" : "保存", cancelButtonText: "取消",
       });
       const name = value.trim();
-      if (action === "mkdir") await files.mkdir(name);
+      if (action === "mkdir") {
+        await files.mkdir(name);
+        await loadDirectory([directory.path, name].filter(Boolean).join("/"));
+        return;
+      }
       else if (entry && name !== entry.name) await files.rename(entry.path, name);
       else return;
     }
@@ -142,7 +147,7 @@ async function manageEntry(action: "mkdir" | "rename" | "remove", entry?: Worksp
 }
 
 function confirmDirectory() {
-  if (loading.value || editing.value || !listing.value || browseError.value) return;
+  if (loading.value || editing.value || !listing.value?.path || browseError.value) return;
   selectedDirectory.value = listing.value.absolutePath;
   finishSelection?.(listing.value.absolutePath);
   dialogVisible.value = false;

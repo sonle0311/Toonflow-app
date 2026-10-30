@@ -3259,5 +3259,6 @@
   "{0} · {1} · 1张": "{0} · {1} · 1 image",
   "图片分辨率": "Image resolution",
   "图片比例": "Image aspect ratio",
-  "比例 {0}": "Aspect ratio {0}"
+  "比例 {0}": "Aspect ratio {0}",
+  "请进入或新建项目文件夹，不能将服务器工作区根目录作为项目": "Open or create a project folder. The server workspace root cannot be used as a project."
 }
