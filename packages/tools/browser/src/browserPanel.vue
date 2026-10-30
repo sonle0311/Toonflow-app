@@ -12,7 +12,7 @@
           <icon-loader-2 v-if="status === 'connecting' || status === 'waiting'" class="is-loading" :size="22" aria-hidden="true" />
           <icon-alert-circle v-else-if="status === 'error'" :size="22" aria-hidden="true" />
           <icon-browser v-else :size="22" aria-hidden="true" />
-          <span>{{ connectionMessage || statusLabel }}</span>
+          <span>{{ translate(connectionMessage) || statusLabel }}</span>
         </div>
         <textarea ref="keyboardInput" class="browserKeyboardInput" aria-label="输入到网页" autocomplete="off" autocapitalize="off" spellcheck="false" :disabled="!canInteract" @keydown="keyScreen" @keyup="keyScreen" @blur="resetInput" @input="textScreen" @compositionstart="composing = true" @compositionend="commitComposition" />
       </div>
@@ -47,6 +47,7 @@ import "element-plus/es/components/button/style/css";
 import "element-plus/es/components/dialog/style/css";
 import "element-plus/es/components/input/style/css";
 import type { ToolCall } from "@toonflow/tools-scaffold/runtime";
+import { translate } from "@toonflow/i18n/vue";
 import type { BrowserInput, BrowserSessionState, BrowserStreamEvent } from "./protocol";
 
 type PanelSession = Pick<BrowserSessionState, "browserSessionId"> & Partial<Omit<BrowserSessionState, "browserSessionId">>;
@@ -89,24 +90,31 @@ const browserAddress = computed(() => {
 });
 const statusLabel = computed(() => ({
   waiting: session.value ? "等待画面…" : latestTool.value?.status === "running" ? "正在启动浏览器…" : "暂无浏览器画面",
-  connecting: "正在连接…", live: "实时画面", paused: "已暂停观看", ended: "会话已结束", error: "画面连接失败",
+  connecting: "正在连接…", live: "实时画面", paused: "已暂停观看", ended: "会话已结束", error: session.value ? "画面连接失败" : "浏览器操作失败",
 })[status.value]);
+function formatToolError(message: string): string {
+  try {
+    const result: unknown = JSON.parse(message);
+    if (result && typeof result === "object" && "error" in result && typeof result.error === "string") return formatToolError(result.error);
+    if (Array.isArray(result)) {
+      const messages = result.flatMap(issue => issue && typeof issue === "object" && typeof issue.message === "string" ? [translate(issue.message)] : []);
+      if (messages.length) return messages.join("\n");
+    }
+  } catch { /* 工具失败也可能返回普通文本。 */ }
+  return translate(message);
+}
 const toolError = computed(() => {
   const tool = latestTool.value;
-  if (tool?.status === "interrupted") return "浏览器操作已中断";
+  if (tool?.status === "interrupted") return translate("浏览器操作已中断");
   if (tool?.status !== "error") return "";
-  try {
-    const result: unknown = JSON.parse(tool.result ?? "null");
-    if (result && typeof result === "object" && "error" in result && typeof result.error === "string") return result.error;
-  } catch { /* 工具失败也可能返回普通文本。 */ }
-  return tool.result?.trim() || "浏览器操作失败";
+  return formatToolError(tool.result?.trim() || "浏览器操作失败");
 });
 const operationLabel = computed(() => {
   const tool = latestTool.value;
   if (!tool || tool.status === "error" || tool.status === "interrupted") return "";
   const labels: Record<string, string> = { open: "打开网页", navigate: "访问网页", snapshot: "读取页面快照", read: "读取正文", hover: "悬停页面", click: "点击页面", type: "填写内容", pressKey: "发送按键", scroll: "滚动页面", screenshot: "截取画面", tabs: "查看标签页", newTab: "打开标签页", selectTab: "切换标签页", closeTab: "关闭标签页", close: "关闭浏览器" };
   const label = typeof tool.args?.action === "string" ? labels[tool.args.action] : undefined;
-  return label ? `${label}${tool.status === "running" ? "…" : "完成"}` : "";
+  return label ? `${label}${tool.status === "running" ? "…" : translate("完成")}` : "";
 });
 let streamController: AbortController | undefined;
 let sessionIdentity = "";
@@ -213,7 +221,7 @@ function endSession(message = "该浏览器会话已结束，无法继续观看"
   connectionMessage.value = message;
 }
 
-watch([() => props.active, browserScope, () => session.value?.browserSessionId, () => session.value?.status === "closed", () => props.live] as const, ([active, scope, sessionId, closed, live]) => {
+watch([() => props.active, browserScope, () => session.value?.browserSessionId, () => session.value?.status === "closed", () => props.live, () => !session.value && !!toolError.value] as const, ([active, scope, sessionId, closed, live, failed]) => {
   stopStream();
   const identity = scope && sessionId ? JSON.stringify([scope, sessionId]) : "";
   if (identity !== sessionIdentity) {
@@ -226,7 +234,7 @@ watch([() => props.active, browserScope, () => session.value?.browserSessionId, 
   // ACT: 同一浏览器可跨轮复用；旧轮只保留已收到的末帧，不重连获取后续轮次的画面。
   if (live === false) { expanded.value = false; status.value = "paused"; connectionMessage.value = ""; return; }
   if (closed || sessionEnded) { endSession(); return; }
-  if (!scope || !sessionId) { status.value = "waiting"; return; }
+  if (!scope || !sessionId) { status.value = failed ? "error" : "waiting"; return; }
   status.value = "connecting";
   connectionMessage.value = "";
   const controller = new AbortController();

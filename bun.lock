@@ -707,6 +707,7 @@
       "dependencies": {
         "@tabler/icons-vue": "^3.46.0",
         "@toonflow/file": "workspace:*",
+        "@toonflow/i18n": "workspace:*",
         "puppeteer-core": "25.12.0",
         "zod": "^4.6.2",
       },
