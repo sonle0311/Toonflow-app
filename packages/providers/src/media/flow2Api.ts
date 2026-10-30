@@ -13,6 +13,13 @@ const rules = [
     value: "http://127.0.0.1:8000",
     props: { placeholder: "http://127.0.0.1:8000" },
   },
+  {
+    type: "inputNumber",
+    field: "maxConcurrentVideos" as const,
+    title: "Số video đồng thời",
+    value: 1,
+    props: { min: 1, max: 8, step: 1, stepStrictly: true },
+  },
 ] as const;
 
 const maxBytes = 100 * 1024 * 1024;
@@ -26,7 +33,7 @@ const modelFamilies = [
   { id: "omni-1.1-flash", label: "Omni 1.1 Flash", type: "video" },
 ] as const;
 
-export function flowConnection(config: Record<string, unknown>): { baseUrl: string; rootUrl: string; apiKey: string } {
+export function flowConnection(config: Record<string, unknown>): { baseUrl: string; rootUrl: string; apiKey: string; maxConcurrentVideos: number } {
   const apiKey = typeof config.apiKey === "string" ? config.apiKey.trim().replace(/^Bearer(?:\s+|$)/i, "").trim() : "";
   if (!apiKey || /[\r\n]/.test(apiKey)) throw new Error("Vui lòng nhập API Key máy chủ Flow2API hợp lệ");
   if (config.baseUrl !== undefined && typeof config.baseUrl !== "string") throw new Error("Địa chỉ máy chủ Flow2API không hợp lệ");
@@ -38,7 +45,9 @@ export function flowConnection(config: Record<string, unknown>): { baseUrl: stri
   }
   url.pathname = url.pathname.replace(/\/+$/, "").replace(/\/v1$/, "");
   const rootUrl = url.href.replace(/\/+$/, "");
-  return { baseUrl: `${rootUrl}/v1`, rootUrl, apiKey };
+  const limit = config.maxConcurrentVideos;
+  const maxConcurrentVideos = typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= 8 ? limit : 1;
+  return { baseUrl: `${rootUrl}/v1`, rootUrl, apiKey, maxConcurrentVideos };
 }
 
 export function flowModel(id: string): ProviderModel | undefined {
@@ -197,7 +206,7 @@ export async function checkFlowHealth(fetcher: typeof fetch, rootUrl: string, si
   });
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
-    throw new Error(`Kiểm tra trạng thái Flow2API thất bại (HTTP ${response.status})`);
+    throw Object.assign(new Error(`Kiểm tra trạng thái Flow2API thất bại (HTTP ${response.status})`), { status: response.status });
   }
   const health = await readJson(response, signal);
   if (health.backend_running === false) throw new Error("Máy chủ Flow2API chưa sẵn sàng hoạt động");
@@ -210,6 +219,23 @@ function errorDetail(context: ProviderContext, data: Record<string, unknown>): s
     .replace(/data:[^,\s]+,[^\s"']+|[A-Za-z0-9+/]{80,}={0,2}/g, "[đã ẩn nội dung đa phương tiện]").slice(0, 600);
 }
 
+function contentRefusalCode(data: unknown): string | undefined {
+  // ACT: Chỉ duyệt 32 giá trị ở các trường lỗi; không đưa dữ liệu hay mã tùy ý vào thông báo.
+  const values: unknown[] = [data];
+  for (let index = 0; index < values.length && index < 32; index++) {
+    const value = values[index];
+    if (typeof value === "string") {
+      const code = /\bPUBLIC_ERROR_(?:MINOR|DANGER_FILTER|SEXUAL|AUDIO_FILTERED)\b/.exec(value.slice(0, 4000))?.[0];
+      if (code) return code;
+    } else if (Array.isArray(value)) values.push(...value.slice(0, 8));
+    else if (value && typeof value === "object") {
+      const error = value as Record<string, unknown>;
+      values.push(...["code", "message", "error", "detail", "details", "data"].map(field => error[field]));
+    }
+  }
+  return undefined;
+}
+
 async function apiJson(context: ProviderContext, url: string, apiKey: string, signal: AbortSignal, body?: string): Promise<Record<string, unknown>> {
   const response = await context.tool.fetch(url, {
     method: body === undefined ? "GET" : "POST", redirect: "error", signal,
@@ -219,7 +245,7 @@ async function apiJson(context: ProviderContext, url: string, apiKey: string, si
   let bytes: Uint8Array;
   try { bytes = await readBytes(response, signal, response.ok && body !== undefined ? Math.ceil(maxBytes / 3) * 4 + 1024 * 1024 : 2 * 1024 * 1024); }
   catch (error) {
-    if (!response.ok && !signal.aborted) throw new Error(`Yêu cầu Flow2API thất bại (HTTP ${response.status}); không đọc được nội dung lỗi`);
+    if (!response.ok && !signal.aborted) throw Object.assign(new Error(`Yêu cầu Flow2API thất bại (HTTP ${response.status}); không đọc được nội dung lỗi`), { status: response.status });
     throw error;
   }
   const text = new TextDecoder().decode(bytes);
@@ -227,15 +253,22 @@ async function apiJson(context: ProviderContext, url: string, apiKey: string, si
   try { parsed = JSON.parse(text); }
   catch { parsed = undefined; }
   const result = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
-  if (!response.ok) {
+  if (!response.ok || result?.error) {
+    const upstreamCode = contentRefusalCode(result ?? text);
+    if (upstreamCode) {
+      const action = upstreamCode === "PUBLIC_ERROR_AUDIO_FILTERED"
+        ? "Hãy kiểm tra yêu cầu âm thanh và nội dung cảnh."
+        : "Hãy kiểm tra lời nhắc và ảnh tham chiếu; nếu cho rằng bị chặn nhầm, hãy kiểm tra lý do trên Flow.";
+      throw Object.assign(new Error(`Flow2API từ chối nội dung theo bộ lọc an toàn (${upstreamCode}; HTTP ${response.status}). ${action} Yêu cầu sẽ không tự gửi lại.`), {
+        status: 422, upstreamStatus: response.status, upstreamCode,
+      });
+    }
     const detail = errorDetail(context, result ?? { message: text });
-    throw new Error(`Yêu cầu Flow2API thất bại (HTTP ${response.status})${detail ? `: ${detail}` : "; hãy kiểm tra cấu hình, quyền truy cập và trạng thái máy chủ"}`);
+    throw Object.assign(new Error(`Yêu cầu Flow2API thất bại (HTTP ${response.status})${detail ? `: ${detail}` : "; hãy kiểm tra cấu hình, quyền truy cập và trạng thái máy chủ"}`), {
+      status: response.ok ? 500 : response.status, upstreamStatus: response.status,
+    });
   }
   if (!result) throw new Error("Flow2API trả JSON không hợp lệ");
-  if (result.error) {
-    const detail = errorDetail(context, result);
-    throw new Error(`Yêu cầu Flow2API thất bại (HTTP ${response.status})${detail ? `: ${detail}` : "; hãy kiểm tra cấu hình, quyền truy cập và trạng thái máy chủ"}`);
-  }
   return result;
 }
 
@@ -339,7 +372,7 @@ async function mediaAsset(context: ProviderContext, value: string, mediaType: "i
     const response = await context.tool.fetch(url, { signal, redirect: "error" }).catch(() => { throw new Error("Tải kết quả Flow2API thất bại; hãy kiểm tra địa chỉ và kết nối mạng"); });
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
-      throw new Error(`Tải kết quả Flow2API thất bại (HTTP ${response.status})`);
+      throw Object.assign(new Error(`Tải kết quả Flow2API thất bại (HTTP ${response.status})`), { status: response.status });
     }
     mimeType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
     if (mimeType.includes("html") || mimeType === "application/json" || mimeType === "text/plain") {
@@ -409,7 +442,7 @@ export default {
   icon: "",
   version: "1.1.0",
   modelsUrl: "http://127.0.0.1:8000/v1/models",
-  readme: "## Flow2API\n\nĐiền API Key máy chủ và địa chỉ gốc, mặc định `http://127.0.0.1:8000`; địa chỉ có `/v1` cũng được chấp nhận. Lấy lại mô hình để hiển thị tối đa 6 nhóm: Nano Banana 2.1, Nano Banana 2 Lite, Veo 3.1 Fast/Lite/Quality và Omni 1.1 Flash. Tỷ lệ, kích thước, chế độ và thời lượng chỉ lấy từ biến thể thực trong `/v1/models`; ID cụ thể cũ vẫn dùng được. Máy chủ cần tài khoản Flow hoạt động và CAPTCHA, kiểm tra qua `/health`.\n\nChọn tỷ lệ và kích thước ảnh (`auto`, `2K`, `4K` theo danh mục). Video chỉ nhận độ phân giải `auto`: Veo văn bản 4/6/8 giây, một ảnh hoặc hai khung 4/6 giây, tham chiếu Fast/Lite 8 giây; Omni 4/6/8/10 giây, văn bản hoặc 1–3 ảnh tham chiếu. Thời lượng là giá trị khai báo, không bảo đảm số giây đầu ra chính xác. Nếu không chọn tham số, dùng lựa chọn thực có trong danh mục.\n\nẢnh dùng URL HTTPS mà máy chủ truy cập được hoặc dữ liệu ảnh thực. Hai khung cần firstFrame và lastFrame đúng thứ tự; không trộn với images. Khi bỏ mode, firstFrame/lastFrame chọn I2V; images chọn tham chiếu nếu hỗ trợ, nếu không chỉ nhận một ảnh đầu. Không tự hiểu hai ảnh tham chiếu là hai khung. Tổng yêu cầu và mỗi tệp tối đa 100 MiB; danh mục ảnh không công bố giới hạn số ảnh. Không hỗ trợ mặt nạ, n khác 1, chất lượng/định dạng đầu ra, âm thanh/video tham chiếu, điều khiển âm thanh, watermark, nối dài hoặc tham số bổ sung.\n\nGửi một `/v1/chat/completions` với `stream: false`, không tự gửi lại. Thời hạn chung cho tạo và tải: ảnh gốc 6 phút, ảnh phóng và video 35 phút. Lưu kết quả trước khi URL hết hạn. Dừng chờ hoặc hết hạn không bảo đảm máy chủ đã hủy; kiểm tra kết quả/log trước khi gửi lại.",
+  readme: "## Flow2API\n\nĐiền API Key máy chủ và địa chỉ gốc, mặc định `http://127.0.0.1:8000`; địa chỉ có `/v1` cũng được chấp nhận. Lấy lại mô hình để hiển thị tối đa 6 nhóm: Nano Banana 2.1, Nano Banana 2 Lite, Veo 3.1 Fast/Lite/Quality và Omni 1.1 Flash. Tỷ lệ, kích thước, chế độ và thời lượng chỉ lấy từ biến thể thực trong `/v1/models`; ID cụ thể cũ vẫn dùng được. Máy chủ cần tài khoản Flow hoạt động và CAPTCHA, kiểm tra qua `/health`.\n\nChọn tỷ lệ và kích thước ảnh (`auto`, `2K`, `4K` theo danh mục). Video chỉ nhận độ phân giải `auto`: Veo văn bản 4/6/8 giây, một ảnh hoặc hai khung 4/6 giây, tham chiếu Fast/Lite 8 giây; Omni 4/6/8/10 giây, văn bản hoặc 1–3 ảnh tham chiếu. Thời lượng là giá trị khai báo, không bảo đảm số giây đầu ra chính xác. Nếu không chọn tham số, dùng lựa chọn thực có trong danh mục.\n\nẢnh dùng URL HTTPS mà máy chủ truy cập được hoặc dữ liệu ảnh thực. Hai khung cần firstFrame và lastFrame đúng thứ tự; không trộn với images. Khi bỏ mode, firstFrame/lastFrame chọn I2V; images chọn tham chiếu nếu hỗ trợ, nếu không chỉ nhận một ảnh đầu. Không tự hiểu hai ảnh tham chiếu là hai khung. Tổng yêu cầu và mỗi tệp tối đa 100 MiB; danh mục ảnh không công bố giới hạn số ảnh. Không hỗ trợ mặt nạ, n khác 1, chất lượng/định dạng đầu ra, âm thanh/video tham chiếu, điều khiển âm thanh, watermark, nối dài hoặc tham số bổ sung.\n\nSố video đồng thời mặc định là 1, có thể chọn số nguyên từ 1 đến 8. Máy chủ Toonflow xếp hàng FIFO theo địa chỉ Flow2API, dùng chung giới hạn cho các yêu cầu tới cùng địa chỉ. Dừng yêu cầu đang xếp hàng sẽ bỏ yêu cầu trước khi gửi POST tạo video. Đây là giới hạn cục bộ của một tiến trình Toonflow, không giới hạn các máy khách khác hay thay đổi hàng đợi của Flow; không bảo đảm tránh được bộ lọc nội dung.\n\nGửi một `/v1/chat/completions` với `stream: false`, không tự gửi lại. Thời hạn chung cho tạo và tải: ảnh gốc 6 phút, ảnh phóng và video 35 phút. Lưu kết quả trước khi URL hết hạn. Dừng chờ hoặc hết hạn sau khi đã gửi không bảo đảm máy chủ đã hủy; kiểm tra kết quả/log trước khi gửi lại. Nếu Flow trả mã lọc nội dung, kiểm tra lời nhắc và ảnh tham chiếu theo mã lỗi; xếp hàng không thay thế việc xử lý lý do bị từ chối.",
   rules,
   models: [],
   async generateImage(request: ImageRequest): Promise<MediaAsset[]> { return generate(this, request, "image"); },

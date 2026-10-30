@@ -2,6 +2,7 @@ import { t, translateMessage } from "@/lib/i18n";
 import { mkdir, readFile, realpath, stat, unlink } from "@toonflow/file";
 import { join, relative } from "node:path";
 import { mediaProviders, type Provider } from "@toonflow/providers";
+import { flowConnection } from "@toonflow/providers/media/flow2Api";
 import type { GeneratedMedia, MediaGenerationRequest, MediaModel, MediaReference } from "@toonflow/tools-scaffold/runtime";
 import conf from "@/utils/conf";
 import { getMediaProvider, listMediaProviders, loadMediaProviderSource } from "@/utils/media/provider";
@@ -17,6 +18,47 @@ const mediaExtensions: Record<string, string> = {
   "audio/mpeg": "mp3", "audio/wav": "wav", "audio/ogg": "ogg", "audio/webm": "webm",
   "audio/flac": "flac", "audio/aac": "aac", "audio/mp4": "m4a", "audio/opus": "opus", "audio/pcm": "pcm",
 };
+
+type FlowVideoQueue = { active: number; limit: number; waiting: (() => void)[] };
+// ACT: 单进程按 Flow2API 地址共享视频队列；多进程部署需由服务端协调并发。
+const flowVideoQueues = new Map<string, FlowVideoQueue>();
+
+function acquireFlowVideoSlot(config: Record<string, unknown>, signal?: AbortSignal): Promise<() => void> {
+  signal?.throwIfAborted();
+  const { rootUrl, maxConcurrentVideos: limit } = flowConnection(config);
+  const queue: FlowVideoQueue = flowVideoQueues.get(rootUrl) ?? { active: 0, limit, waiting: [] };
+  queue.limit = limit;
+  flowVideoQueues.set(rootUrl, queue);
+  return new Promise((resolve, reject) => {
+    const advance = () => {
+      while (queue.active < queue.limit && queue.waiting.length) queue.waiting.shift()!();
+      if (!queue.active && !queue.waiting.length) flowVideoQueues.delete(rootUrl);
+    };
+    const start = () => {
+      signal?.removeEventListener("abort", abort);
+      queue.active++;
+      let released = false;
+      resolve(() => {
+        if (released) return;
+        released = true;
+        queue.active--;
+        advance();
+      });
+    };
+    const abort = () => {
+      const index = queue.waiting.indexOf(start);
+      if (index < 0) return;
+      queue.waiting.splice(index, 1);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason);
+      advance();
+    };
+    queue.waiting.push(start);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    else advance();
+  });
+}
 
 function invalid(message: string): never {
   throw Object.assign(new Error(message), { status: 400 });
@@ -204,13 +246,15 @@ export async function generateMedia(
   if (typeof generate !== "function") invalid(t`此供应商不支持${translateMessage({ image: "图片", video: "视频", audio: "音频" }[mediaType])}生成`);
   const rules = Array.isArray(provider.rules) ? provider.rules : [];
   if (rules.some(rule => rule.field === "apiKey") && (typeof provider.config.apiKey !== "string" || !provider.config.apiKey.trim())) invalid("请先在媒体模型设置中配置供应商 API Key");
-  const prepared = await prepareRequest(directory, mediaType, request, readReference, signal);
-  signal?.throwIfAborted();
-  const finish = beginGeneration(provider);
+  const releaseVideoSlot = provider.id === "flow2Api" && mediaType === "video" ? await acquireFlowVideoSlot(provider.config, signal) : undefined;
+  let finish: (() => void) | undefined;
   const written: string[] = [];
   const result: GeneratedMedia[] = [];
   try {
     signal?.throwIfAborted();
+    const prepared = await prepareRequest(directory, mediaType, request, readReference, signal);
+    signal?.throwIfAborted();
+    finish = beginGeneration(provider);
     const { type, ...parameters } = prepared;
     const assets = type === "audio" ? await provider.generateAudio!(parameters as AudioRequest)
       : type === "image" ? await provider.generateImage!(parameters as ImageRequest) : await provider.generateVideo!(parameters as VideoRequest);
@@ -237,5 +281,9 @@ export async function generateMedia(
     // ACT: 只回滚本次创建的文件，保留目录中已有的节点资源。
     await Promise.all(written.map(path => unlink(path).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; })));
     throw err;
-  } finally { finish(); }
+  } finally {
+    finish?.();
+    // ACT: 仅等本地操作收尾；取消或超时不保证 Flow2API 已撤销上游任务。
+    releaseVideoSlot?.();
+  }
 }
