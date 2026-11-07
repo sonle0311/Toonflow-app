@@ -2,18 +2,18 @@ import logger from "morgan";
 import express from "express";
 import cors from "cors";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
-import { readFile, readdir } from "@toonflow/file";
+import { dirname, resolve } from "node:path";
+import { lstat, readFile, readdir, unlink } from "@toonflow/file";
 import type { Request, Response, NextFunction } from "express";
 import buildRoute from "@/core";
 import { errorFromCause } from "@/lib/responseFormat";
 import desktopRequest from "@/lib/desktop";
 import { getRuntimePlatform } from "@/lib/platform";
 import initializePlugins from "@/utils/plugins/initialize";
-import { languageRequest, resolveRequestLocale, runWithLocale, setLocaleFallback, translateError, translateMessage } from "@/lib/i18n";
+import { languageRequest, setLocaleFallback, translateError, translateMessage } from "@/lib/i18n";
 import { detectLocale, normalizeLocale } from "@toonflow/i18n";
 
-const autoInstallProviders = ["tfRouter.ts", "apiMart.ts", "metaso.ts", "compshare.ts", "grok2Api.ts", "chatgpt2Api.ts", "flow2Api.ts"];
+const autoInstallProviders = ["apiMart.ts", "metaso.ts", "compshare.ts", "grok2Api.ts", "chatgpt2Api.ts", "flow2Api.ts"];
 
 export async function createApp({
   webRoot,
@@ -41,6 +41,21 @@ export async function createApp({
   // conf 由下方的路由动态加载，必须先确定整个进程共用的数据目录。
   if (dataDirectory) process.env.TOONFLOW_DATA_DIR = resolve(dataDirectory);
   const { default: conf } = await import("@/utils/conf");
+  const providerDirectory = resolve(dirname(conf.path), "providers");
+  const providerDirectoryInfo = await lstat(providerDirectory).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (providerDirectoryInfo) {
+    if (providerDirectoryInfo.isSymbolicLink() || !providerDirectoryInfo.isDirectory()) throw new Error("供应商目录不能是符号链接或文件");
+    // ACT: 仅迁移清理已移除的内置适配文件；不递归删除目录，不改其他用户供应商。
+    for (const file of await readdir(providerDirectory, { withFileTypes: true })) {
+      if (file.name.toLowerCase() !== "tfrouter.ts" || (!file.isFile() && !file.isSymbolicLink())) continue;
+      await unlink(resolve(providerDirectory, file.name)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+  }
   const { initializeNetwork } = await import("@/utils/network");
   await initializeNetwork();
   const { initializeModelCatalog } = await import("@/utils/ai/modelCatalog");
@@ -96,25 +111,25 @@ export async function createApp({
   }
   app.use(cors());
   app.use(languageRequest);
+  const { initializeMultiTenantRuntime, multiTenantAccess } = await import("@/utils/multiTenant/runtime");
+  initializeMultiTenantRuntime(app);
+  app.use(multiTenantAccess);
   app.use("/a2a", express.json({ limit: "2mb" }));
   app.use(["/api/workspaces/files/write", "/api/assets/save"], express.raw({ type: "application/octet-stream", limit: "100mb" }));
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ extended: true, limit: "100mb" }));
   app.use("/api/desktop", desktopRequest);
 
-  const { default: initializeProviderModels } = await import("@/utils/ai/initialize");
-  // ACT: 启动先使用已有模型，远程刷新不阻塞服务监听。
-  void initializeProviderModels().catch(error => console.warn("启动时刷新供应商模型失败：", error));
   const router = await import("@/router");
   router.default(app);
-  const [{ createMcpRouter }, { getMcpTools }, { authorizeMcp }, { skillResources }] = await Promise.all([
+  const [{ createMcpRouter }, { getMcpTools, runInMcpRequest }, { authorizeMcp }, { skillResources }] = await Promise.all([
     import("@toonflow/mcp"),
     import("@/utils/mcp/tools"),
     import("@/utils/mcp/control"),
     import("@/utils/mcp/resources"),
   ]);
   app.use("/mcp", createMcpRouter({ getTools: getMcpTools, authorize: authorizeMcp, resources: skillResources,
-    runInRequest: (request, operation) => runWithLocale(resolveRequestLocale(request.get("accept-language")), operation),
+    runInRequest: runInMcpRequest,
     translate: translateMessage,
     translateError,
   }));

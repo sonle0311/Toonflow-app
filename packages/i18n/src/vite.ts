@@ -7,7 +7,7 @@ export function i18nPlugin(): Plugin {
     enforce: "pre",
     transform(source, id) {
       const path = id.replaceAll("\\", "/");
-      if (!/(?:\/apps\/web\/src\/|\/packages\/(?:nodes\/[^/]+|nodeShared|nodeScaffold|tools\/browser)\/src\/)/.test(path)) return;
+      if (!/(?:\/apps\/web\/src\/|\/packages\/(?:(?:nodes\/[^/]+|nodeShared|nodeScaffold|tools\/browser)\/src\/|providerWeb\/))/.test(path)) return;
       return transformSource(source, path);
     },
   };

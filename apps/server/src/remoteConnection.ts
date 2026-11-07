@@ -32,6 +32,7 @@ function serverUrl(value: unknown) {
 export async function createRemoteConnection(directory: string, options: {
   deviceName?: string;
   appVersion?: string;
+  localOnly?: () => boolean;
   validateTarget?: (url: string) => void;
   onChange?: (remote: boolean) => Promise<void>;
   restart?: () => void;
@@ -41,11 +42,14 @@ export async function createRemoteConnection(directory: string, options: {
   let savedText: string | undefined;
   try {
     savedText = await readFile(path, "utf8");
-    const saved = JSON.parse(savedText);
-    if (typeof saved.deviceToken !== "string" || !/^[\w-]{32,256}$/.test(saved.deviceToken) || typeof saved.name !== "string") {
-      throw new Error("设备连接配置无效");
+    // ACT: 平台主机沿本机后端启动；原互联配置保持原值，退出后独立启动时再使用。
+    if (!options.localOnly?.()) {
+      const saved = JSON.parse(savedText);
+      if (typeof saved.deviceToken !== "string" || !/^[\w-]{32,256}$/.test(saved.deviceToken) || typeof saved.name !== "string") {
+        throw new Error("设备连接配置无效");
+      }
+      connection = { url: serverUrl(saved.url), deviceToken: saved.deviceToken, name: saved.name.slice(0, 128), appVersion: readAppVersion(saved.appVersion) };
     }
-    connection = { url: serverUrl(saved.url), deviceToken: saved.deviceToken, name: saved.name.slice(0, 128), appVersion: readAppVersion(saved.appVersion) };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
@@ -87,13 +91,18 @@ export async function createRemoteConnection(directory: string, options: {
     : { mode: "local", appVersion };
   const router = express.Router();
   router.use(languageRequest);
+  function requireConnectionSwitch() {
+    if (options.localOnly?.()) throw Object.assign(new Error("当前模式不允许切换设备连接"), { status: 409 });
+  }
   async function saveConnection(value?: RemoteConnection) {
+    requireConnectionSwitch();
     const previous = savedText;
     const next = value ? JSON.stringify(value) : undefined;
     if (next) await writeAtomic(path, next, { mode: 0o600 });
     else await rm(path, { force: true });
     try {
       // 写入让出事件循环后也要复检，不能在配对期间开启共享后自动停掉它。
+      requireConnectionSwitch();
       if (value) options.validateTarget?.(value.url);
       await options.onChange?.(Boolean(value));
       savedText = next;
@@ -123,6 +132,7 @@ export async function createRemoteConnection(directory: string, options: {
   router.use(express.json({ limit: "8kb" }));
   router.use((request, response, next) => {
     if (request.get("x-toonflow-workspace") !== "1") return void response.sendStatus(403);
+    if (options.localOnly?.()) return void response.status(409).json({ message: translateMessage("当前模式不允许切换设备连接") });
     if (changing) return void response.status(409).json({ message: translateMessage("正在切换连接，请稍候") });
     next();
   });
@@ -222,8 +232,9 @@ function remoteProxy(connection: RemoteConnection): express.RequestHandler {
       result.on("error", () => response.destroy());
       result.pipe(response);
     });
-    // ACT: 项目 ZIP 完成打包后才发送响应头，最多等待 10 分钟。
-    const headerTimeoutMs = request.method === "GET" && request.path === "/api/workspaces/files/export" ? 10 * 60 * 1000 : 20000;
+    // ACT: 项目打包、媒体转码完成后才发送响应头，最多等待 10 分钟，包含上传和排队。
+    const headerTimeoutMs = (request.method === "GET" && request.path === "/api/workspaces/files/export"
+      || request.method === "POST" && request.path === "/api/media/preview") ? 10 * 60 * 1000 : 20000;
     const headerTimeout = setTimeout(() => upstream.destroy(new Error("连接服务器超时")), headerTimeoutMs);
     headerTimeout.unref();
     upstream.on("error", () => {

@@ -1,22 +1,60 @@
-import { onScopeDispose } from "vue";
+import { computed, onScopeDispose, toValue, watch, type MaybeRefOrGetter, type Ref } from "vue";
 import { runAgentLoop, type AgentTool, type AgentToolResult } from "@earendil-works/pi-agent-core";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context, type Message, type Model } from "@earendil-works/pi-ai";
 import { EventSourceParserStream } from "eventsource-parser/stream";
 import type { MediaGenerationRequest, MediaModel } from "@toonflow/tools-scaffold/runtime";
 import type { NodeOutput } from "./values";
+import { readNodeModels, subscribeNodeModels } from "./modelCatalog";
+export { invalidateNodeModels, readNodeModels, subscribeNodeModels } from "./modelCatalog";
 
 export type NodeAiModel = {
   providerId: string;
   providerLabel: string;
   modelId: string;
+  routeId?: string;
   label: string;
   protocol: "openai-completions" | "openai-responses" | "anthropic-messages";
   contextWindow?: number;
   maxOutputTokens?: number;
 };
 export type NodeMediaModel = Omit<MediaModel, "mode"> & {
+  routeId?: string;
   mode?: (string | string[])[];
 };
+type ModelIdentity = { providerId: string; modelId: string; routeId?: string };
+
+export function getNodeModelIdentity(model: ModelIdentity) {
+  return { providerId: model.providerId, modelId: model.providerId === "multiTenant" ? model.routeId ?? model.modelId : model.modelId };
+}
+
+export function getNodeModelKey(model: ModelIdentity) {
+  const identity = getNodeModelIdentity(model);
+  return JSON.stringify([identity.providerId, identity.modelId]);
+}
+
+export function findNodeModel<T extends ModelIdentity>(models: readonly T[], selection: string | Pick<ModelIdentity, "providerId" | "modelId">): T | undefined {
+  let identity: Pick<ModelIdentity, "providerId" | "modelId">;
+  if (typeof selection === "string") {
+    let value: unknown;
+    try { value = JSON.parse(selection); } catch { return; }
+    if (!Array.isArray(value) || value.length !== 2 || !value.every(item => typeof item === "string")) return;
+    identity = { providerId: value[0], modelId: value[1] };
+  } else identity = selection;
+  if (!identity || typeof identity.providerId !== "string" || !identity.providerId
+    || typeof identity.modelId !== "string" || !identity.modelId) return;
+  return models.find(model => model.providerId === identity.providerId && (model.modelId === identity.modelId
+    || identity.providerId === "multiTenant" && model.routeId === identity.modelId));
+}
+
+export function useNodeModelSelection<T extends ModelIdentity>(models: MaybeRefOrGetter<readonly T[]>, selection: Ref<string>) {
+  const selected = computed(() => findNodeModel(toValue(models), selection.value));
+  watch(selected, model => {
+    if (!model || model.providerId !== "multiTenant") return;
+    const key = getNodeModelKey(model);
+    if (selection.value !== key) selection.value = key;
+  }, { immediate: true, flush: "sync" });
+  return selected;
+}
 export type NodeImageRequest = {
   directory: string;
   providerId: string;
@@ -62,14 +100,9 @@ export type NodeAiTool = {
 
 async function readResult<T>(response: Response): Promise<T> {
   const result = await response.json();
-  if (!response.ok || result.code !== 200) throw new Error(result.message || `AI 请求失败（HTTP ${response.status}），请稍后重试。`);
+  if (!response.ok || result.code !== 200) throw Object.assign(new Error(result.message || `AI 请求失败（HTTP ${response.status}），请稍后重试。`), { status: response.status });
   return result.data;
 }
-
-// ACT: 独立 UMD 各有模块作用域，共用宿主缓存；模型设置保存后失效，不按节点重复请求。
-const modelCacheKey = Symbol.for("toonflow.nodeModels");
-const modelCacheHost = globalThis as typeof globalThis & { [modelCacheKey]?: Map<string, Promise<unknown[]>> };
-const modelCache = modelCacheHost[modelCacheKey] ??= new Map<string, Promise<unknown[]>>();
 
 type MediaPriceCache = {
   prices: Map<string, { expires: number; value: Promise<NodeMediaPrice | null> }>;
@@ -80,83 +113,80 @@ const mediaPriceCacheHost = globalThis as typeof globalThis & { [mediaPriceCache
 const mediaPriceCache = mediaPriceCacheHost[mediaPriceCacheKey] ??= (() => {
   const cache: MediaPriceCache = { prices: new Map(), requestedAt: new Map() };
   if (typeof window !== "undefined") {
-    const invalidate = (event: Event) => {
-      if (event.type === "toonflow:plugin-installed" && (event as CustomEvent<{ type?: string }>).detail?.type !== "provider") return;
-      cache.prices.clear();
-    };
-    window.addEventListener("toonflow:provider-config-changed", invalidate);
-    window.addEventListener("toonflow:plugin-installed", invalidate);
+    subscribeNodeModels(type => { if (type === "media") cache.prices.clear(); });
   }
   return cache;
 })();
 
-type MediaTaskResult = { code: number; data: (NodeImageResult | NodeVideoResult | NodeAudioResult)[] | null; message: string };
-type PendingMediaTask = { directory: string; failedAt?: number; finish: (result: MediaTaskResult) => void; fail: (error: unknown) => void };
-const mediaTasksKey = Symbol.for("toonflow.nodeMediaTasks");
+export type NodeMediaResult = NodeImageResult | NodeVideoResult | NodeAudioResult;
+type MediaTaskResult = { code: number; data: NodeMediaResult[] | null; message: string };
+export type NodeMediaTaskStatus = {
+  taskId: string;
+  state?: "running" | "interrupted" | "succeeded" | "failed" | "cancelled";
+  resumable?: boolean;
+  providerData?: unknown;
+  nodeId?: string;
+  canvasPath?: string;
+  result?: MediaTaskResult;
+};
+export type NodeMediaTaskOptions = {
+  taskId?: string;
+  nodeId?: string;
+  canvasPath?: string;
+  onStatus?: (status: NodeMediaTaskStatus) => void | Promise<void>;
+  isCancelled?: () => boolean;
+};
+type PendingMediaTask = { directory: string; failedAt?: number; resume?: boolean; onStatus?: NodeMediaTaskOptions["onStatus"]; finish: (result: MediaTaskResult) => void; fail: (error: unknown) => void };
+const mediaTasksKey = Symbol.for("toonflow.nodeMediaTasks.v2");
 const mediaTasksHost = globalThis as typeof globalThis & { [mediaTasksKey]?: ReturnType<typeof createMediaTasks> };
 // ACT: 图片、视频等独立 UMD 共用短轮询；每批最多 100 项，不按节点占用长连接。
 const mediaTasks = mediaTasksHost[mediaTasksKey] ??= createMediaTasks();
 
 function createMediaTasks() {
   const pending = new Map<string, PendingMediaTask>();
-  const cancellations = new Map<string, Set<string>>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let polling = false;
 
   function schedule(delay = 1000) {
-    if (polling || timer !== undefined || (!pending.size && !cancellations.size)) return;
+    if (polling || timer !== undefined || !pending.size) return;
     timer = setTimeout(poll, delay);
-  }
-
-  function cancel(directory: string, taskId: string) {
-    const ids = cancellations.get(directory) ?? new Set<string>();
-    ids.add(taskId);
-    cancellations.set(directory, ids);
-    schedule(0);
   }
 
   async function poll() {
     timer = undefined;
     polling = true;
     try {
-      for (const [directory, ids] of cancellations) {
-        cancellations.delete(directory);
-        const taskIds = [...ids];
-        for (let offset = 0; offset < taskIds.length; offset += 100) {
-          // 取消失败由服务端无心跳过期兜底，不重新提交生成请求。
-          await fetch("/api/ai/media/tasks/cancel", {
-            method: "POST", headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-            body: JSON.stringify({ directory, taskIds: taskIds.slice(offset, offset + 100) }), signal: AbortSignal.timeout(10000),
-          }).then(readResult).catch(() => {});
-        }
-      }
-      const directories = new Set([...pending.values()].map(task => task.directory));
-      for (const directory of directories) {
-        const taskIds = [...pending].filter(([, task]) => task.directory === directory).map(([id]) => id);
+      const groups = new Map([...pending.values()].map(task => [JSON.stringify([task.directory, !!task.resume]), { directory: task.directory, resume: !!task.resume }]));
+      for (const { directory, resume } of groups.values()) {
+        const taskIds = [...pending].filter(([, task]) => task.directory === directory && !!task.resume === resume).map(([id]) => id);
         for (let offset = 0; offset < taskIds.length; offset += 100) {
           const batch = taskIds.slice(offset, offset + 100).filter(id => pending.has(id));
           if (!batch.length) continue;
+          const waitingTasks = new Map(batch.map(id => [id, pending.get(id)]));
           try {
             const results = await fetch("/api/ai/media/tasks/status", {
               method: "POST", headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-              body: JSON.stringify({ directory, taskIds: batch }), signal: AbortSignal.timeout(10000),
-            }).then(readResult<{ taskId: string; result?: MediaTaskResult }[]>);
+              body: JSON.stringify({ directory, taskIds: batch, ...(resume ? { resume: true } : {}) }), signal: AbortSignal.timeout(10000),
+            }).then(readResult<NodeMediaTaskStatus[]>);
             const byId = new Map(results.map(result => [result.taskId, result]));
             for (const id of batch) {
               const task = pending.get(id);
-              if (!task) continue;
+              if (!task || task !== waitingTasks.get(id)) continue;
               const item = byId.get(id);
               if (!item) throw new Error("生成任务响应不完整，请重试");
+              task.resume = false;
               task.failedAt = undefined;
+              try { await task.onStatus?.(item); }
+              catch (error) { task.fail(error); continue; }
               if (item.result) task.finish(item.result);
             }
           } catch (error) {
             for (const id of batch) {
               const task = pending.get(id);
-              if (!task) continue;
+              if (!task || task !== waitingTasks.get(id)) continue;
               // ACT: 状态查询允许 90 秒临时断线，不因几次快速失败取消已经提交的生成。
               task.failedAt ??= Date.now();
-              if (task.failedAt + 90000 <= Date.now()) { task.fail(error); cancel(directory, id); }
+              if (task.failedAt + 90000 <= Date.now()) task.fail(Object.assign(error instanceof Error ? error : new Error("生成状态查询中断"), { mediaTaskDisconnected: true }));
             }
           }
         }
@@ -167,63 +197,34 @@ function createMediaTasks() {
     }
   }
 
-  function wait(directory: string, taskId: string, signal: AbortSignal) {
+  function wait(directory: string, taskId: string, signal: AbortSignal, options: NodeMediaTaskOptions = {}, resume = false) {
     signal.throwIfAborted();
+    if (pending.has(taskId)) throw new Error("生成任务已在当前窗口查询，请等待查询结束");
     return new Promise<NonNullable<MediaTaskResult["data"]>>((resolve, reject) => {
       const cleanup = () => {
-        pending.delete(taskId);
+        if (pending.get(taskId) === task) pending.delete(taskId);
         signal.removeEventListener("abort", abort);
-        if (!pending.size && !cancellations.size) { clearTimeout(timer); timer = undefined; }
+        if (!pending.size) { clearTimeout(timer); timer = undefined; }
       };
-      const abort = () => { cleanup(); cancel(directory, taskId); reject(signal.reason); };
-      pending.set(taskId, {
+      const abort = () => { cleanup(); reject(signal.reason); };
+      const task: PendingMediaTask = {
         directory,
+        resume,
+        onStatus: options.onStatus,
         finish(result) {
           cleanup();
           if (result.code === 200 && result.data) resolve(result.data);
           else reject(new Error(result.message || "媒体生成失败"));
         },
         fail(error) { cleanup(); reject(error); },
-      });
+      };
+      pending.set(taskId, task);
       signal.addEventListener("abort", abort, { once: true });
       schedule();
     });
   }
 
-  return { wait, cancel };
-}
-
-export function invalidateNodeModels(type: "language" | "media") {
-  modelCache.delete(type === "language" ? "/api/ai/models" : "/api/ai/media/models");
-  if (type === "media") mediaPriceCache.prices.clear();
-}
-
-async function readModels<T>(url: string, signal: AbortSignal): Promise<T[]> {
-  signal.throwIfAborted();
-  let pending = modelCache.get(url);
-  if (!pending) {
-    const request = fetch(url, { cache: "no-store" }).then(readResult<unknown[]>).catch(error => {
-      if (modelCache.get(url) === request) modelCache.delete(url);
-      throw error;
-    });
-    pending = request;
-    modelCache.set(url, request);
-  }
-  // 单个节点关闭只取消自己的等待，不能中断其他节点共用的请求。
-  let cancel = () => {};
-  try {
-    const models = await Promise.race([
-      pending,
-      new Promise<never>((_resolve, reject) => {
-        cancel = () => reject(signal.reason);
-        signal.addEventListener("abort", cancel, { once: true });
-      }),
-    ]);
-    signal.throwIfAborted();
-    return modelCache.get(url) === pending ? models as T[] : readModels<T>(url, signal);
-  } finally {
-    signal.removeEventListener("abort", cancel);
-  }
+  return { wait };
 }
 
 async function requestModel(input: NodeAiRequest, context: Context, model: Model<NodeAiModel["protocol"]>, signal: AbortSignal) {
@@ -233,7 +234,7 @@ async function requestModel(input: NodeAiRequest, context: Context, model: Model
     signal.throwIfAborted();
     const response = await fetch("/api/ai/generate", {
       method: "POST", headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-      body: JSON.stringify({ providerId, modelId, context, directory, references }), signal,
+      body: JSON.stringify({ providerId, modelId, context, directory, references, requestId: crypto.randomUUID() }), signal,
     });
     if (!response.ok) await readResult(response);
     if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("AI 未返回预期的 SSE 数据流，无法接收生成内容。");
@@ -271,22 +272,38 @@ async function requestModel(input: NodeAiRequest, context: Context, model: Model
   return stream;
 }
 
-export function useNodeAi() {
+export function useNodeAi(options: { onModelsChanged?: () => unknown } = {}) {
   const controller = new AbortController();
   onScopeDispose(() => controller.abort());
   const requestSignal = (signal?: AbortSignal) => signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+  const loadedTypes = new Set<"language" | "media">();
+  const unsubscribe = subscribeNodeModels(type => {
+    if (!loadedTypes.has(type) || controller.signal.aborted || !options.onModelsChanged) return;
+    void Promise.resolve().then(() => {
+      if (!controller.signal.aborted) return options.onModelsChanged?.();
+    }).catch(() => {});
+  });
+  onScopeDispose(unsubscribe);
 
-  async function getModels(signal?: AbortSignal) {
-    return readModels<NodeAiModel>("/api/ai/models", requestSignal(signal));
+  async function getModels(signal?: AbortSignal, fresh = false) {
+    loadedTypes.add("language");
+    return readNodeModels<NodeAiModel>("language", requestSignal(signal), fresh);
   }
 
-  async function getMediaModels(signal?: AbortSignal) {
-    return readModels<NodeMediaModel>("/api/ai/media/models", requestSignal(signal));
+  async function getMediaModels(signal?: AbortSignal, fresh = false) {
+    loadedTypes.add("media");
+    return readNodeModels<NodeMediaModel>("media", requestSignal(signal), fresh);
   }
 
   async function getMediaPrice(input: NodeMediaPriceRequest, signal?: AbortSignal): Promise<NodeMediaPrice | null> {
     const waitingSignal = requestSignal(signal);
     waitingSignal.throwIfAborted();
+    const requestedInput = input;
+    if (input.providerId === "multiTenant") {
+      const selected = findNodeModel(await getMediaModels(waitingSignal, true), input);
+      if (!selected) throw new Error("所选模型不存在，请重新选择");
+      input = { ...input, modelId: selected.modelId };
+    }
     const now = Date.now();
     const { prices, requestedAt } = mediaPriceCache;
     for (const [key, entry] of prices) if (entry.expires <= now) prices.delete(key);
@@ -306,7 +323,7 @@ export function useNodeAi() {
             cancel = () => reject(waitingSignal.reason);
             waitingSignal.addEventListener("abort", cancel, { once: true });
           });
-          return await getMediaPrice(input, signal);
+          return await getMediaPrice(requestedInput, signal);
         } finally {
           clearTimeout(timer);
           waitingSignal.removeEventListener("abort", cancel);
@@ -345,22 +362,41 @@ export function useNodeAi() {
         waitingSignal.addEventListener("abort", cancel, { once: true });
       })]);
       waitingSignal.throwIfAborted();
-      return prices.get(key) === entry ? price : getMediaPrice(input, signal);
+      return prices.get(key) === entry ? price : getMediaPrice(requestedInput, signal);
     } finally {
       waitingSignal.removeEventListener("abort", cancel);
     }
   }
 
-  async function generateMedia<T extends "image" | "video" | "audio">(mediaType: T, input: NodeImageRequest | NodeVideoRequest | NodeAudioRequest, signal?: AbortSignal) {
+  async function generateMedia<T extends "image" | "video" | "audio">(mediaType: T, input: NodeImageRequest | NodeVideoRequest | NodeAudioRequest, signal?: AbortSignal, options: NodeMediaTaskOptions = {}) {
     const waitingSignal = requestSignal(signal);
     waitingSignal.throwIfAborted();
-    const taskId = crypto.randomUUID();
-    // 提交使用独立超时；用户取消立即结束等待，提交收尾后再取消，避免先取消后登记的竞态。
+    if (input.providerId === "multiTenant") {
+      const selected = findNodeModel(await getMediaModels(waitingSignal, true), input);
+      if (!selected) throw new Error("所选模型不存在，请重新选择");
+      input = { ...input, modelId: selected.modelId };
+      waitingSignal.throwIfAborted();
+    }
+    const taskId = options.taskId ?? crypto.randomUUID();
+    // 提交使用独立超时；断线或卸载只结束等待，任务仍可按提交前保存的 ID 查询。
     const submitted = fetch("/api/ai/media/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-      body: JSON.stringify({ ...input, mediaType, taskId }), signal: AbortSignal.timeout(30000),
-    }).then(readResult<{ taskId: string }>);
+      body: JSON.stringify({ ...input, mediaType, taskId, nodeId: options.nodeId, canvasPath: options.canvasPath }), signal: AbortSignal.timeout(30000),
+    }).then(response => readResult<{ taskId: string }>(response).catch(error => {
+      // 仅标记提交响应的明确拒绝；取消请求和后续状态查询失败不能释放任务身份。
+      if (!waitingSignal.aborted && error instanceof Error && [400, 401, 403, 404, 405, 413, 415, 422, 429].includes(response.status)) {
+        Object.assign(error, { mediaTaskRejected: true });
+      }
+      throw error;
+    })).then(async result => {
+      if (options.isCancelled?.()) await cancelMedia(input.directory, taskId);
+      return result;
+    });
+    const explicitCancel = () => {
+      if (!options.taskId) void submitted.then(() => cancelMedia(input.directory, taskId), () => cancelMedia(input.directory, taskId)).catch(() => {});
+    };
+    waitingSignal.addEventListener("abort", explicitCancel, { once: true });
     let abort = () => {};
     try {
       const started = await Promise.race([submitted, new Promise<never>((_resolve, reject) => {
@@ -370,24 +406,43 @@ export function useNodeAi() {
       waitingSignal.throwIfAborted();
       if (started.taskId !== taskId) throw new Error("生成任务响应无效，无法确认任务状态，请确认 Toonflow 服务端已更新后重试。");
     } catch (error) {
-      void submitted.then(() => mediaTasks.cancel(input.directory, taskId), () => mediaTasks.cancel(input.directory, taskId));
+      if (!waitingSignal.aborted) explicitCancel();
+      waitingSignal.removeEventListener("abort", explicitCancel);
       throw error;
     } finally {
       waitingSignal.removeEventListener("abort", abort);
     }
-    return await mediaTasks.wait(input.directory, taskId, waitingSignal) as { path: string; mimeType: string; mediaType: T }[];
+    try {
+      return await mediaTasks.wait(input.directory, taskId, waitingSignal, options) as { path: string; mimeType: string; mediaType: T }[];
+    } catch (error) {
+      if (!options.taskId && (error as { mediaTaskDisconnected?: boolean })?.mediaTaskDisconnected) void cancelMedia(input.directory, taskId).catch(() => {});
+      throw error;
+    } finally {
+      waitingSignal.removeEventListener("abort", explicitCancel);
+    }
   }
 
-  function generateImage(input: NodeImageRequest, signal?: AbortSignal) {
-    return generateMedia("image", input, signal);
+  function generateImage(input: NodeImageRequest, signal?: AbortSignal, options?: NodeMediaTaskOptions) {
+    return generateMedia("image", input, signal, options);
   }
 
-  function generateVideo(input: NodeVideoRequest, signal?: AbortSignal) {
-    return generateMedia("video", input, signal);
+  function generateVideo(input: NodeVideoRequest, signal?: AbortSignal, options?: NodeMediaTaskOptions) {
+    return generateMedia("video", input, signal, options);
   }
 
-  function generateAudio(input: NodeAudioRequest, signal?: AbortSignal) {
-    return generateMedia("audio", input, signal);
+  function generateAudio(input: NodeAudioRequest, signal?: AbortSignal, options?: NodeMediaTaskOptions) {
+    return generateMedia("audio", input, signal, options);
+  }
+
+  function resumeMedia(directory: string, taskId: string, signal?: AbortSignal, options?: NodeMediaTaskOptions) {
+    return mediaTasks.wait(directory, taskId, requestSignal(signal), options, true);
+  }
+
+  async function cancelMedia(directory: string, taskId: string) {
+    await fetch("/api/ai/media/tasks/cancel", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+      body: JSON.stringify({ directory, taskIds: [taskId] }), signal: AbortSignal.timeout(10000),
+    }).then(readResult);
   }
 
   async function generate(input: NodeAiRequest): Promise<NodeAiResult> {
@@ -397,10 +452,10 @@ export function useNodeAi() {
     if (!prompt.trim()) throw new Error("请输入提示词");
     const definitions = input.tools ?? [];
     if (new Set(definitions.map(tool => tool.name)).size !== definitions.length) throw new Error("工具名称不能重复");
-    const selected = (await getModels(callSignal)).find(model => model.providerId === providerId && model.modelId === modelId);
+    const selected = findNodeModel(await getModels(callSignal, providerId === "multiTenant"), { providerId, modelId });
     if (!selected) throw new Error("所选模型不存在，请重新选择");
     const model: Model<NodeAiModel["protocol"]> = {
-      id: modelId, name: selected.label, provider: providerId, api: selected.protocol, baseUrl: "",
+      id: selected.modelId, name: selected.label, provider: selected.providerId, api: selected.protocol, baseUrl: "",
       reasoning: false, input: ["text", "image"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: selected.contextWindow ?? 262144, maxTokens: selected.maxOutputTokens ?? 32768,
@@ -416,6 +471,8 @@ export function useNodeAi() {
       },
     }));
     let turns = 0;
+    let requests = 0;
+    const identity = getNodeModelIdentity(selected);
     const messages = await runAgentLoop([{ role: "user", content: prompt, timestamp: Date.now() }], {
       systemPrompt: systemPrompt ?? "", messages: [], tools,
     }, {
@@ -428,7 +485,12 @@ export function useNodeAi() {
         const text = (event.result as AgentToolResult<unknown>).content.filter(part => part.type === "text").map(part => part.text).join("\n");
         onEvent({ type: "toolEnd", id: event.toolCallId, name: event.toolName, result: event.isError ? text : JSON.parse(text), isError: event.isError });
       }
-    }, callSignal, (_model, context) => requestModel(input, context, model, callSignal));
+    }, callSignal, async (_model, context) => {
+      const current = requests++ === 0 || selected.providerId !== "multiTenant" ? selected
+        : findNodeModel(await getModels(callSignal, true), identity);
+      if (!current) throw new Error("所选模型不存在，请重新选择");
+      return requestModel({ ...input, providerId: current.providerId, modelId: current.modelId }, context, model, callSignal);
+    });
     callSignal.throwIfAborted();
     const message = messages.findLast((message): message is AssistantMessage => message.role === "assistant");
     if (!message) throw new Error("AI 未返回结果");
@@ -440,5 +502,5 @@ export function useNodeAi() {
     return { text, ...(reasoning ? { reasoning } : {}) };
   }
 
-  return { getModels, getMediaModels, getMediaPrice, generateImage, generateVideo, generateAudio, generate };
+  return { getModels, getMediaModels, getMediaPrice, generateImage, generateVideo, generateAudio, resumeMedia, cancelMedia, generate };
 }

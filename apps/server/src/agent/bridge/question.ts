@@ -3,7 +3,7 @@ import type { QuestionAnswer, QuestionContext, QuestionRequest } from "@toonflow
 import type { AgentEvent } from "@/agent/runtime/types";
 import { translateMessage } from "@/lib/i18n";
 
-type PendingQuestion = { cwd: string; request: QuestionRequest; cancel(): void; finish(result: QuestionAnswer | Error): void };
+type PendingQuestion = { cwd: string; request: QuestionRequest & { requiresLocalApproval?: boolean }; cancel(): void; finish(result: QuestionAnswer | Error): void };
 
 // ACT: 提问随当前流存活，不设用户答题超时；断开或停止时取消，多进程时需共享通道。
 const pendingQuestions = new Map<string, PendingQuestion>();
@@ -42,7 +42,7 @@ export function createQuestionContext(cwd: string, send: (event: Extract<AgentEv
   };
 }
 
-export function answerQuestion(cwd: string, callId: string, response: { answer?: string; values?: unknown; cancelled?: boolean; skipped?: boolean }) {
+export function answerQuestion(cwd: string, callId: string, response: { answer?: string; values?: unknown; cancelled?: boolean; skipped?: boolean }, local = false) {
   const pending = pendingQuestions.get(callId);
   if (!pending || pending.cwd !== cwd) throw Object.assign(new Error("提问不存在或已结束"), { status: 404 });
   if (response.cancelled) {
@@ -71,6 +71,9 @@ export function answerQuestion(cwd: string, callId: string, response: { answer?:
     const parsed = z.strictObject(shape).safeParse(response.values);
     if (!parsed.success) throw Object.assign(new Error("请按要求填写表单"), { status: 400 });
     const values = parsed.data as NonNullable<QuestionAnswer["values"]>;
+    if (pending.request.requiresLocalApproval && values.approved === true && !local) {
+      throw Object.assign(new Error("请在桌面端或服务器本机确认安装插件"), { status: 403 });
+    }
     const answer = fields.filter(field => values[field.field] !== undefined).map(field => {
       const value = values[field.field];
       return `${field.title}：${Array.isArray(value) ? value.join("、") : typeof value === "boolean" ? translateMessage(value ? "是" : "否") : value}`;

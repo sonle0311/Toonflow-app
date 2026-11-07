@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n";
 import { z } from "zod";
+import { getProviderBaseUrl } from "@/utils/ai/provider";
 
 const modelSchema = z.object({
   id: z.string().optional(), name: z.string().optional(),
@@ -9,25 +10,23 @@ const modelSchema = z.object({
   type: z.string().optional(),
 });
 
-export async function fetchProviderModels({ apiUrl, protocol, apiKey, providerId }: { apiUrl: string; protocol: string; apiKey: string; providerId?: string }) {
-  const url = new URL(apiUrl);
-  if (url.pathname === "/") url.pathname = "/v1";
-  if (protocol === "anthropic-messages" && !/\/v1\/*$/.test(url.pathname)) {
-    url.pathname = `${url.pathname.replace(/\/+$/, "")}/v1`;
-  }
-  url.pathname = `${url.pathname.replace(/\/+$/, "")}/models`;
-  const headers: Record<string, string> = { Accept: "application/json" };
+export async function fetchProviderModels({ apiUrl, protocol, apiKey, providerId, headers: customHeaders, signal }: { apiUrl: string; protocol: string; apiKey: string; providerId?: string; headers?: Record<string, string>; signal?: AbortSignal }) {
+  const url = new URL(getProviderBaseUrl(apiUrl, protocol));
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}${protocol === "anthropic-messages" ? "/v1" : ""}/models`;
+  const headers = new Headers({ Accept: "application/json" });
   if (protocol === "anthropic-messages") {
-    headers["anthropic-version"] = "2023-06-01";
-    headers["x-api-key"] = apiKey;
+    headers.set("anthropic-version", "2023-06-01");
+    headers.set("x-api-key", apiKey);
     url.searchParams.set("limit", "1000");
-  } else if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  } else if (apiKey) headers.set("Authorization", `Bearer ${apiKey}`);
+  for (const [name, value] of Object.entries(customHeaders ?? {})) headers.set(name, value);
 
   const models = new Map<string, { id: string; label: string; contextWindow?: number; maxOutputTokens?: number }>();
   const cursors = new Set<string>();
-  const signal = AbortSignal.timeout(30000);
+  const timeoutSignal = AbortSignal.timeout(30000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
   while (true) {
-    const response = await fetch(url, { headers, signal, redirect: "error" });
+    const response = await fetch(url, { headers, signal: requestSignal, redirect: "error" });
     if (!response.ok) throw new Error(t`模型列表获取失败（HTTP ${response.status}），请检查 API 地址、连接协议和密钥是否正确。`);
     const result = z.object({
       data: z.array(modelSchema),

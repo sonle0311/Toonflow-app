@@ -279,15 +279,25 @@ Toonflow 采用 MIT 开源许可，可自行部署。第三方模型服务的 AP
 
 | 操作系统 | GitHub                                                       |
 | -------- | ------------------------------------------------------------ |
-| Windows  | [Release](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
-| macOS    | [Release](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
+| Windows x64 | [EXE 安装包](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
+| Windows ARM64 | [EXE 安装包](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
+| macOS Apple Silicon（ARM64，macOS 14 及以上） | [DMG 安装包](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
+| macOS Intel（x64，macOS 14 及以上） | [DMG 安装包](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
+| Linux x64（Debian / Ubuntu） | [DEB 安装包](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
+| Linux ARM64（Debian / Ubuntu） | [DEB 安装包](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
 | Android ARM64 | [APK 下载](https://github.com/HBAI-Ltd/Toonflow-app/releases/latest) |
 
 Android 版仅支持 ARM64 设备，下载发布页中的 `toonflow-版本号-android-arm64.apk` 安装。手机内置本地 Bun 后端，可独立运行；也可从首页「设备互联」扫码或手动连接已开启共享的电脑或远程后端（支持局域网与公网）。
 
 Windows 安装器会自动检测并安装 WebView2；如果安装后打开闪退，请前往 [WebView2 下载页面](https://developer.microsoft.com/microsoft-edge/webview2/) 手动安装运行时。
 
-macOS（Apple Silicon）将 Toonflow 拖入“应用程序”后直接打开即可，无需预先执行终端命令。若遇到系统安全提示，请按以下顺序处理。
+Windows 的 Intel / AMD 电脑选择 `toonflow-版本号-Setup.exe`，ARM64 电脑选择 `toonflow-版本号-win-arm64-Setup.exe`。ARM64 需要 .NET Framework 4.8.1，较新的 Windows 11 已内置。
+
+Linux 选择对应架构的 `toonflow-版本号-linux-x64.deb` 或 `toonflow-版本号-linux-arm64.deb`，在下载目录执行 `sudo apt install ./安装包文件名.deb`，安装后从应用菜单打开。安装需要联网；apt 会准备 FFmpeg、curl、unzip、CA 证书等依赖，安装脚本在解包应用前下载固定版本的 Bun 并校验大小与 SHA-256，配置阶段再安装运行时。下载或校验失败会在解包前中止安装。
+
+macOS 两种架构均使用统一的 Electrobun SDK，最低支持 macOS 14。选择对应架构的 `toonflow-版本号-macos-arm64.dmg` 或 `toonflow-版本号-macos-x64.dmg`，打开后将 `toonflow.app` 拖入“应用程序”，再从“应用程序”打开 Toonflow。正式发布流程使用 Developer ID Application 签署应用与 DMG，并完成 Apple 公证。旧版 Intel Mac 客户端首次迁移时须下载完整 DMG 覆盖安装，不能通过旧版增量更新直接迁移；安装前退出应用并备份原数据目录。
+
+macOS 若遇到系统安全提示，请按以下顺序处理。
 
 <details>
 <summary><strong>macOS 无法安装或打开时的处理方法</strong></summary>
@@ -435,98 +445,7 @@ https://github.com/user-attachments/assets/2d9fddac-dfdf-4640-b030-b09d7f7287e9
 
 ---
 
-## 6. 🚀 TF-Router 官方中转平台
-
-<p align="center">
-  <a href="https://api.toonflow.net/">
-    <img src="https://img.shields.io/badge/TF--Router_官方中转平台-181717?style=for-the-badge&logoColor=white" alt="TF-Router" />
-  </a>
-</p>
-
-TF-Router 是 Toonflow 自营的官方模型中转平台，欢迎使用。其平台源码已完全开源，可自行部署审计：[HBAI-Ltd/TF-Router](https://github.com/HBAI-Ltd/TF-Router)。
-
-<details>
-<summary><strong>致 Toonflow 社区的一封信（发于2026-06-08）</strong></summary>
-
-> ### 致 Toonflow 社区的一封信
-> 130天。
-> 不长，但足够让我们看清楚一些事情。
-> 从第一行代码提交到今天，我们走过了 130天，发布了 20个版本，留下了 800+ 次Commits，写下了 213,765 行代码、640,810 个字符。
-> 两次重构，一套供应商系统，一个我们引以为傲的工作流程。
-> 我们以为这已经足够了。
-> 但它不够。
-> 有人跟我们说，想在 Toonflow 里加一个自己的模块，改半天看不懂。
-> 有人跟我们说，社区太小，遇到问题找不到人。
-> 有人跟我们说，商业条款让他们的项目无法落地。
-> 我们听到了。
-> 这 130 天里，团队成员轮流守在群里，7×24 小时回答每一个问题。没有赞助，没有补贴，全部是我们自己掏腰包支撑的人力成本。
-> 不是因为我们有多少钱。
-> 是因为我们相信这件事值得做。
-> 所以，我们决定进行第三次重构。
-> Toonflow 的每一次重构，都往更开源更开放的方向发展。
-> 这一次重构，我们选择：彻底开放。
-> 　
-> 一、MIT License
-> 重构完成后我们决定把许可证从 Apache-2.0 更换为 MIT License 并去掉全部的商业附加条款。
-> 它将完全的开放。没有任何的商业限制。
-> 你可以用它做任何事。
-> 　
-> 二、全自由度插件系统
-> 我们要重新设计整个插件架构。
-> 故事板、全景图、时间轴、甚至——小游戏。
-> 只要你想得到，就可以塞进来。
-> 不是 Hack，是设计如此。
-> 　
-> 三、Drizzle ORM + 多数据库支持
-> 升级至 Drizzle ORM。
-> 本地、PostgreSQL、MySQL，按你的需要选择。
-> 二开不再是噩梦。
-> 　
-> 四、Monorepo 全链路打通
-> 插件开发、SDK 集成、发布上线，一条龙。
-> 让贡献变得足够简单，简单到一个人就能做到。
-> 　
-> 五、新模块
-> 无限画布 —— 不止于大，更在于自由
-> 灵感模式 —— 为创作者而生
-> 插件 Hub —— 让好插件被看见
-> Skill Hub —— 让经验可以传递
-> 供应商 Hub —— 生态从这里开始
-> 完善的 Docker 整合 —— 部署不再是门槛
-> 　
-> 然后，说一件我们一直不太好意思说的事。
-> 重构需要时间。这段时间里，服务器在跑，域名在续费，团队在熬夜，咖啡在涨价。
-> 我们没有融资，没有广告，没有任何隐藏的商业计划。
-> 但我们需要活着，才能继续把这件事做完。
-> 所以我们上线了「Toonflow 官方中转平台」 TF-Router。
-> 说实话，这个平台我们犹豫了很久。
-> 这个平台，不是我们想做的，我们不想因为一个中转平台，让人觉得 Toonflow 开始"恰饭"了。
-> 这个包袱，我们背了很久。
-> 但很多用户没有开白资格，用不上 Seedance 2.0，反复问我们有没有办法。
-> 我们想了很久，没办法最后只能决定搭一个，我们自己和火山签了Seedance年框合同。
-> **同时，我们决定平台活动期间对Seedance 2.0平进平出，不赚一分钱差价。**
-> 活动结束后我们会正常收取一点点点点服务费——但现在，先让你们用上再说。
-> 更重要的是——TF-Router平台源码已经全部开源打包【<a href="https://github.com/HBAI-Ltd/TF-Router" target="_blank">开源地址</a>】。
-> 你不信任我们？没关系，你可以自己看代码，自己部署，自己跑。
-> 这就是我们的态度。
-> 如果你愿意去试用，是对我们目前唯一能支撑下去的方式投一票信任。
-> 如果你不愿意，也没关系，继续用 Toonflow，继续骂我们，继续提需求。
-> 我们都在。
-> 最后说一句真心话
-> 我们只是一群相信「创作工具应该属于每个人」的普通人。
-> Toonflow 从来不是我们的产品。
-> 它是我们一起写的故事。
-> 第三次重构，不是终点。
-> 是我们重新出发的地方。
-> 感谢每一个用过它、骂过它、给过建议的人。
-> 你们才是让它走到今天的原因。
-> 谢谢你们。
-
-</details>
-
----
-
-## 7. 👨‍👩‍👧‍👦 微信交流群
+## 6. 👨‍👩‍👧‍👦 微信交流群
 
 拉群小助手:
 
@@ -540,13 +459,13 @@ TF-Router 是 Toonflow 自营的官方模型中转平台，欢迎使用。其平
 
 ---
 
-## 8. 💌 联系我们
+## 7. 💌 联系我们
 
 📧 邮箱：[ltlctools@outlook.com](mailto:ltlctools@outlook.com?subject=Toonflow咨询)
 
 ---
 
-## 9. 📜 开源许可
+## 8. 📜 开源许可
 
 Toonflow 采用 [MIT 许可证](./LICENSE)。第三方依赖和素材遵循各自的许可与版权声明。
 
@@ -556,7 +475,7 @@ Toonflow 采用 [MIT 许可证](./LICENSE)。第三方依赖和素材遵循各�
 
 ---
 
-## 10. 🙏 致谢
+## 9. 🙏 致谢
 
 - **合作伙伴**：算能云、腾讯混元 3D、智星云。
 - **项目贡献者**：感谢参与代码开发、文档完善、插件分享和问题排查的所有贡献者。
@@ -564,6 +483,8 @@ Toonflow 采用 [MIT 许可证](./LICENSE)。第三方依赖和素材遵循各�
 
 仰起脸笑的像满月：贡献 Codex 20x 开发算力。
 西安中星数字智能科技有限公司：贡献苹果证书签名。
+
+<p align="center"><sub>Free code signing provided by <a href="https://signpath.io/">SignPath.io</a>, certificate by <a href="https://signpath.org/">SignPath Foundation</a>.</sub></p>
 
 <div align="center">
 

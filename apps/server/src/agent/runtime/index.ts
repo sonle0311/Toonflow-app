@@ -84,7 +84,7 @@ export async function run(
   mentions = agentMentionsSchema.parse(mentions);
   validateMentionTokens(prompt, mentions);
   if (!prompt.trim() && !attachments.length && !mentions.length) throw Object.assign(new Error("请输入消息、提及或添加附件"), { status: 400 });
-  getAgentModelConfiguration(providerId, modelId, thinkingLevel);
+  await getAgentModelConfiguration(providerId, modelId, thinkingLevel);
   const attachmentContents: (z.infer<typeof agentAttachmentsSchema>[number] & { content?: string })[] = [];
   for (const attachment of attachments) {
     const { path } = await resolveWorkspacePath(cwd, attachment.path);
@@ -133,7 +133,7 @@ export async function run(
     send({ type: "accepted", runId: active.runId, message: { id: queueId, content: prompt.trim(), mode } });
     return;
   }
-  const { provider, model, runtime, effectiveThinkingLevel } = await createAgentModel(providerId, modelId, thinkingLevel);
+  const { provider, model, runtime, runtimeModel, effectiveThinkingLevel } = await createAgentModel(providerId, modelId, thinkingLevel);
   if (sessionPath) {
     const file = await stat(sessionPath).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") throw Object.assign(new Error("会话不存在，请重新打开对话"), { status: 404 });
@@ -198,11 +198,11 @@ export async function run(
       } finally { active.waitingForAgent = undefined; }
     });
     for (const tool of teamTools) {
-      if (tools.some(existing => existing.name === tool.name)) throw new Error(`工具名称 ${tool.name} 已被内置团队通讯工具占用`);
+      if (tools.some(existing => existing.name === tool.name)) throw new Error(t`工具名称 ${tool.name} 已被内置团队通讯工具占用`);
       tools.push(tool);
     }
     tools.push(await createSubAgentTool({
-      cwd, tools, canvas, modelRuntime: runtime, model: runtime.getModel(providerId, modelId), thinkingLevel: effectiveThinkingLevel,
+      cwd, tools, canvas, modelRuntime: runtime, model: runtimeModel, thinkingLevel: effectiveThinkingLevel,
       runTask: (name, task, taskSignal, onProgress) => runDelegatedAgent({
         cwd, parentFile: file, name, task, providerId, modelId, thinkingLevel, canvas, signal: taskSignal, send, onProgress,
         onCanvasCancel: reason => { controller.abort(reason); onCanvasCancel?.(reason); },
@@ -231,7 +231,7 @@ export async function run(
       cwd,
       ...resources,
       modelRuntime: runtime,
-      model: runtime.getModel(providerId, modelId),
+      model: runtimeModel,
       thinkingLevel: effectiveThinkingLevel,
       sessionManager: history,
       tools: tools.map((tool) => tool.name),

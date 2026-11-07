@@ -1,5 +1,5 @@
 import { $ } from "bun";
-import { readdir, rm } from "@toonflow/file";
+import { existsSync, readdir, rm } from "@toonflow/file";
 import { resolve } from "node:path";
 
 const projectDir = resolve(import.meta.dirname, "../../..");
@@ -9,7 +9,7 @@ for (const group of ["nodes", "tools", "ext"]) {
   const groupDirectory = resolve(projectDir, "packages", group);
   await rm(resolve(projectDir, "build", group), { recursive: true, force: true });
   for (const entry of await readdir(groupDirectory, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || !existsSync(resolve(groupDirectory, entry.name, "package.json"))) continue;
     await $`${process.execPath} run build`
       .cwd(resolve(groupDirectory, entry.name))
       .env({ ...process.env, NODE_ENV: "production" });

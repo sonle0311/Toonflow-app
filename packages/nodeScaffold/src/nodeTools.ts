@@ -93,15 +93,13 @@ export const nodeTools = {
       nodeId, name, description: definition.description.trim(),
       parameters,
       async execute(args, context) {
-        const result = await definition.parameters.safeParseAsync(args);
-        let parsed: z.output<Schema>;
-        if (result.success) parsed = result.data;
-        else {
+        let parsed = await definition.parameters.safeParseAsync(args);
+        if (!parsed.success) {
           let normalized: Record<string, unknown> | undefined;
           if (args && typeof args === "object" && !Array.isArray(args)) {
             const values = args as Record<string, unknown>;
             // ACT: 仅兼容顶层数字/布尔值的 JSON 字符串；不转换容器或猜业务值，完整 schema 仍负责范围与约束。
-            for (const issue of result.error.issues) {
+            for (const issue of parsed.error.issues) {
               if (issue.code !== "invalid_type" || issue.path.length !== 1 || typeof issue.path[0] !== "string"
                 || !["number", "boolean"].includes(issue.expected)) continue;
               const field = issue.path[0];
@@ -116,11 +114,15 @@ export const nodeTools = {
               } catch { /* 非 JSON 标量仍返回原校验错误。 */ }
             }
           }
-          if (!normalized) throw result.error;
-          parsed = await definition.parameters.parseAsync(normalized);
+          if (normalized) parsed = await definition.parameters.safeParseAsync(normalized);
+        }
+        if (!parsed.success) {
+          throw new Error(`节点函数 ${name} 参数校验失败，未执行。请按以下 parameters 修正 args；需要其他操作时，用 getNodeTools 查询此节点的函数后分别调用，不要原样重试。${JSON.stringify({
+            nodeId, name, description: entry.description, parameters, issues: parsed.error.issues,
+          })}`);
         }
         context.signal?.throwIfAborted();
-        return definition.execute(parsed, context);
+        return definition.execute(parsed.data, context);
       },
     };
     registry.set(key, entry);

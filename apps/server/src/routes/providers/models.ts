@@ -3,6 +3,7 @@ import { z } from "zod";
 import { validateFields } from "@/lib/middleware";
 import { success } from "@/lib/responseFormat";
 import u from "@/utils";
+import { providerHeadersSchema } from "@/utils/ai/provider";
 
 const router = Router();
 
@@ -14,7 +15,8 @@ export default router.post("/", validateFields({
   protocol: z.enum(["openai-completions", "openai-responses", "anthropic-messages"]),
   apiKey: z.string().max(8192),
   providerId: z.string().max(96).optional(),
+  headers: providerHeadersSchema.optional(),
 }), async (req, res) => {
-  const { apiUrl, protocol, apiKey, providerId } = req.body as { apiUrl: string; protocol: string; apiKey: string; providerId?: string };
-  res.json(success(await u.ai.fetchProviderModels({ apiUrl, protocol, apiKey, providerId })));
+  const { apiUrl, protocol, apiKey, providerId, headers } = req.body as { apiUrl: string; protocol: string; apiKey: string; providerId?: string; headers?: Record<string, string> };
+  res.json(success(await u.ai.fetchProviderModels({ apiUrl, protocol, apiKey, providerId, headers })));
 });
