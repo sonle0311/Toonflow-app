@@ -307,7 +307,7 @@ watch(() => props.directory, async (directory, _previous, onCleanup) => {
     if (cancelled) return;
     if (!canvases.value.length) {
       try {
-        const canvas = await createCanvasFile(directory, "画布1", controller.signal);
+        const canvas = await createCanvasFile(directory, translate("画布1"), controller.signal);
         checkCanvasDirectory(directory, controller.signal);
         mergeCanvases([canvas]);
       } catch (err) {
@@ -491,7 +491,7 @@ async function createCanvasFile(directory: string, name?: string, signal?: Abort
   const flow = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } };
   for (let number = 1; ; number++) {
     checkCanvasDirectory(directory, signal);
-    const canvasName = name ?? `画布${number}`;
+    const canvasName = name ?? translate("画布{0}", { 0: number });
     const id = `${canvasName}.json`;
     try {
       await files.writeJson(id, { toonflowCanvas: true, ...flow }, true);

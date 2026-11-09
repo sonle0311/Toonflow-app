@@ -4100,5 +4100,7 @@
   "读取登录供应商失败": "Không đọc được danh sách nhà cung cấp đăng nhập",
   "启动登录失败": "Không bắt đầu được quá trình đăng nhập",
   "提交授权码失败": "Gửi mã cấp quyền thất bại",
-  "确定退出 {0} 登录？相关模型将不可用。": "Đăng xuất khỏi {0}? Các model của nhà cung cấp này sẽ không dùng được."
+  "确定退出 {0} 登录？相关模型将不可用。": "Đăng xuất khỏi {0}? Các model của nhà cung cấp này sẽ không dùng được.",
+  "画布1": "Bảng vẽ 1",
+  "画布{0}": "Bảng vẽ {0}"
 }

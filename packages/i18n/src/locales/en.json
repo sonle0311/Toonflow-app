@@ -4061,5 +4061,7 @@
   "读取登录供应商失败": "Failed to load sign-in providers",
   "启动登录失败": "Failed to start sign-in",
   "提交授权码失败": "Failed to submit the authorization code",
-  "确定退出 {0} 登录？相关模型将不可用。": "Sign out of {0}? Its models will no longer be available."
+  "确定退出 {0} 登录？相关模型将不可用。": "Sign out of {0}? Its models will no longer be available.",
+  "画布1": "Canvas 1",
+  "画布{0}": "Canvas {0}"
 }
