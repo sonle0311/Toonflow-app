@@ -124,6 +124,7 @@ declare module 'vue' {
     Network: typeof import('./../components/settings/panels/network/index.vue')['default']
     NodeMenuSettings: typeof import('./../components/settings/panels/general/nodeMenuSettings.vue')['default']
     NodeToolsDialog: typeof import('./../components/agent/nodeToolsDialog.vue')['default']
+    OauthProviders: typeof import('./../components/settings/panels/languageModel/oauthProviders.vue')['default']
     Personalization: typeof import('./../components/settings/panels/personalization/index.vue')['default']
     PluginMarket: typeof import('./../components/settings/panels/pluginMarket/index.vue')['default']
     Privacy: typeof import('./../components/settings/panels/about/privacy.vue')['default']

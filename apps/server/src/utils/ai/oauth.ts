@@ -37,6 +37,17 @@ export function oauthAuthPath() {
   return resolve(dirname(conf.path), "auth.json");
 }
 
+/** ACT: OpenAI 的 "Sign in with ChatGPT" 需要稳定的安装标识，首次登录时生成并持久化。 */
+export function oauthDeviceId() {
+  const settings = (conf.get("settings", {}) ?? {}) as Record<string, unknown>;
+  const existing = typeof settings.oauthDeviceId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(settings.oauthDeviceId)
+    ? settings.oauthDeviceId : "";
+  if (existing) return existing;
+  const created = randomUUID();
+  conf.set("settings", { ...settings, oauthDeviceId: created });
+  return created;
+}
+
 /** 每次操作使用独立 runtime，避免共享实例持有过期的凭据快照。 */
 async function createAuthRuntime() {
   return ModelRuntime.create({ authPath: oauthAuthPath(), modelsPath: null, refreshOnCreate: false });
@@ -140,7 +151,8 @@ export async function startOAuthLogin(providerId: string, method = "browser"): P
     },
   };
 
-  void runtime.login(providerId, "oauth", interaction as Parameters<typeof runtime.login>[2])
+  const deviceId = oauthDeviceId();
+  void runtime.login(providerId, "oauth", interaction as Parameters<typeof runtime.login>[2], { getDeviceId: () => deviceId })
     .then(() => { state.state = "done"; state.message = t`登录成功`; })
     .catch((error: unknown) => {
       state.state = controller.signal.aborted ? "error" : "error";
