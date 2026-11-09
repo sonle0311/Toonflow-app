@@ -199,3 +199,37 @@ audit_logs       (id, actor, action, target, at)
 - [ ] Mua add-on → tải về → dùng được; watermark đúng user
 - [ ] Admin xem được đơn, cấp/khoá license tay
 - [ ] Installer Windows + macOS chạy được, update feed hoạt động
+
+---
+
+## Trạng thái thực hiện (cập nhật 2026-11-09)
+
+| Hạng mục | Trạng thái | Bằng chứng |
+|---|---|---|
+| App độc lập (self channel, tắt telemetry, update env) | ✅ | commit `1bdf89c7`; headless: 0 request tới toonflow.net |
+| Market: auth + refresh | ✅ | `toonflow-market` commit `1a6982e`, `047be24`; register/login/refresh 200 |
+| Market: plans + orders + SePay webhook | ✅ | order → webhook → paid; replay không nhân đôi; sai key 401 |
+| Market: license ES256 + entitlements | ✅ | `/license/verify` valid:true; 402 khi hết hạn |
+| App ↔ market client + proxy routes | ✅ | commit `452b4bc4`; login/status/plans/orders qua app |
+| Enforcement 401/402 + đóng cài plugin | ✅ | commit `6aab8651`; 401/402/403 đúng |
+| Gate theo entitlement (trial 3 node) | ✅ | trial → `imageNode,textNode,videoNode`; Pro → 9 node |
+| UI đăng nhập + paywall + mua gói | ✅ | commit `6aab8651`; flow Pro → QR → webhook → mở khoá |
+| Add-on: catalog, mua, license, watermark | ✅ | commit `babd9d41` (app), `32c9b24` (market) |
+| Admin tối thiểu (users/orders/grant/addon) | ✅ | `toonflow-market` commit `4fc1452` |
+| Branding (tên, bundle id, icon) | ⏳ chờ tên thương hiệu |
+| Installer + update feed | ⏳ cần build trên Windows/macOS |
+| SePay production | ⏳ cần tài khoản + `SEPAY_*` thật |
+
+### Biến môi trường mới
+
+App (`apps/server`):
+
+| Biến | Ý nghĩa |
+|---|---|
+| `MARKET_BASE_URL` | Base URL market service (mặc định `http://127.0.0.1:4100`) |
+| `MARKET_BYPASS=1` | Tắt chặn subscription khi phát triển |
+| `MARKET_ALLOW_PLUGIN_ADMIN=1` | Cho phép cài plugin thủ công (mặc định chặn) |
+| `TOONFLOW_DESKTOP_UPDATE_URL`, `TOONFLOW_GITHUB_RELEASES_URL` | Nguồn cập nhật của bạn |
+| `VITE_TELEMETRY_URL` | Endpoint telemetry riêng (bỏ trống = tắt) |
+
+Market: xem `toonflow-market/README.md`.
