@@ -226,8 +226,13 @@ audit_logs       (id, actor, action, target, at)
 | QA end-to-end | ✅ đăng ký qua UI → trial 3 node → hết hạn → paywall → mua Basic → mở khoá 9 node |
 | Giới hạn thiết bị (D15) | ✅ `devices` enforce `maxDevices`; thiết bị thứ 3 → 409 `DEVICE_LIMIT`; endpoint gỡ thiết bị |
 | Offline grace 7 ngày + heartbeat 6h | ✅ market tắt → `offline:true`, entitlement cache vẫn mở app; heartbeat định kỳ |
+| Xác minh license offline | ✅ JWKS lưu local, verify ES256 khi offline; sửa cache → vẫn trả claim gốc; license hỏng → fail closed |
 | `.env.example` | ✅ app + market |
 | SePay production | ⏳ cần tài khoản + `SEPAY_*` thật |
+
+### Sai lệch so với kế hoạch ban đầu
+
+- **Mã hoá bundle add-on ≥ 299k (D17)**: chưa làm. Market tự phục vụ file qua HTTPS kèm kiểm tra license, không có CDN công khai để rò rỉ; mã hoá chỉ bảo vệ file khi lộ ổ đĩa server, không chống được người mua giải mã. Hiện dùng **license gate + watermark + verify license**. Nếu sau này chuyển bundle lên CDN công khai thì mới cần mã hoá.
 
 ### Biến môi trường mới
 
