@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { hostname } from "node:os";
 import { dirname, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import conf from "@/utils/conf";
 
 export type MarketSession = {
@@ -24,8 +26,56 @@ export type MarketEntitlements = {
 type Cache = { at: number; value: MarketEntitlements | null };
 
 let cache: Cache = { at: 0, value: null };
+let offlineUntil = 0;
+
+/** ACT: offline grace 7 ngày kể từ lần đồng bộ entitlement thành công gần nhất. */
+const OFFLINE_GRACE_MS = 7 * 86400000;
 
 const sessionFile = () => resolve(dirname(conf.path), "market-session.json");
+const deviceFile = () => resolve(dirname(conf.path), "device.json");
+const entitlementCacheFile = () => resolve(dirname(conf.path), "market-entitlement.json");
+
+/** Mã thiết bị ổn định theo máy cài đặt, dùng cho giới hạn số thiết bị. */
+export function deviceInfo(): { id: string; name: string } {
+  try {
+    if (existsSync(deviceFile())) {
+      const parsed = JSON.parse(readFileSync(deviceFile(), "utf8")) as { id?: unknown; name?: unknown };
+      if (typeof parsed.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.id)) {
+        return { id: parsed.id.toLowerCase(), name: typeof parsed.name === "string" ? parsed.name : hostname() };
+      }
+    }
+  } catch {
+    // Tệp hỏng thì tạo lại mã mới.
+  }
+  const created = { id: randomUUID(), name: hostname() };
+  try {
+    mkdirSync(dirname(deviceFile()), { recursive: true });
+    writeFileSync(deviceFile(), JSON.stringify(created), { mode: 0o600 });
+  } catch {
+    // Không ghi được thì vẫn dùng mã tạm trong phiên.
+  }
+  return created;
+}
+
+function readEntitlementCache(): Cache | undefined {
+  try {
+    if (!existsSync(entitlementCacheFile())) return undefined;
+    const parsed = JSON.parse(readFileSync(entitlementCacheFile(), "utf8")) as Cache;
+    if (!parsed || typeof parsed.at !== "number" || !parsed.value) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeEntitlementCache(value: MarketEntitlements) {
+  try {
+    mkdirSync(dirname(entitlementCacheFile()), { recursive: true });
+    writeFileSync(entitlementCacheFile(), JSON.stringify({ at: Date.now(), value }), { mode: 0o600 });
+  } catch {
+    // Bỏ qua lỗi ghi cache; lần gọi sau sẽ thử lại.
+  }
+}
 
 function marketBaseUrl() {
   return (process.env.MARKET_BASE_URL ?? "http://127.0.0.1:4100").replace(/\/+$/, "");
@@ -53,12 +103,14 @@ function clearSession() {
 }
 
 async function marketFetch<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  const headers: Record<string, string> = { "content-type": "application/json", ...(init.headers as Record<string, string> | undefined) };
+  const headers: Record<string, string> = { "content-type": "application/json", "x-device-id": deviceInfo().id, "x-device-name": deviceInfo().name, ...(init.headers as Record<string, string> | undefined) };
   if (init.token) headers.authorization = `Bearer ${init.token}`;
   const response = await fetch(`${marketBaseUrl()}${path}`, { ...init, headers });
-  const body = await response.json().catch(() => ({})) as { code?: number; message?: string; data?: T };
+  const body = await response.json().catch(() => ({})) as { code?: number; codeName?: string; message?: string; data?: T };
   if (!response.ok) {
-    throw Object.assign(new Error(body?.message || `Market trả lỗi ${response.status}`), { status: response.status, code: body?.code });
+    throw Object.assign(new Error(body?.message || `Market trả lỗi ${response.status}`), {
+      status: response.status, code: body?.code, codeName: body?.codeName,
+    });
   }
   return body.data as T;
 }
@@ -111,11 +163,23 @@ export async function getEntitlements(force = false): Promise<MarketEntitlements
     const token = await ensureAccessToken(session);
     const data = await marketFetch<MarketEntitlements>("/license/entitlements", { token });
     cache = { at: Date.now(), value: data };
+    offlineUntil = 0;
+    writeEntitlementCache(data);
     return data;
   } catch (error) {
-    if ((error as { status?: number }).status === 402) {
+    const status = (error as { status?: number }).status;
+    if (status === 402) {
       cache = { at: Date.now(), value: null };
       return null;
+    }
+    // ACT: market không truy cập được → dùng entitlement đã cache trong 7 ngày.
+    if (status === undefined || status === 503) {
+      const cached = readEntitlementCache();
+      if (cached?.value && Date.now() - cached.at < OFFLINE_GRACE_MS && cached.value.expiresAt > Date.now()) {
+        cache = cached;
+        offlineUntil = cached.at + OFFLINE_GRACE_MS;
+        return cached.value;
+      }
     }
     throw error;
   }
@@ -133,7 +197,10 @@ export async function getStatus() {
     planName: entitlements?.planName ?? "",
     expiresAt: entitlements?.expiresAt ?? 0,
     plugins: entitlements?.plugins ?? [],
+    addons: entitlements?.addons ?? [],
     maxDevices: entitlements?.maxDevices ?? 0,
+    offline: offlineUntil > Date.now(),
+    graceUntil: offlineUntil,
   };
 }
 
@@ -196,4 +263,11 @@ export async function installAddon(slug: string) {
   mkdirSync(nodesDirectory, { recursive: true });
   writeFileSync(resolve(nodesDirectory, `${slug}.umd.js`), source);
   return { slug, bytes: source.length };
+}
+
+/** Heartbeat định kỳ 6 giờ để entitlement và giới hạn thiết bị luôn được đồng bộ. */
+export function startMarketHeartbeat() {
+  const timer = setInterval(() => { void getEntitlements(true).catch(() => {}); }, 6 * 3600_000);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }

@@ -28,7 +28,12 @@ export async function marketGate(req: Request, res: Response, next: NextFunction
   try {
     entitlements = await getEntitlements();
   } catch (error) {
-    res.status(503).json({ code: 503, codeName: "MARKET_UNAVAILABLE", message: error instanceof Error ? error.message : "Không kết nối được market" });
+    const status = (error as { status?: number }).status ?? 503;
+    res.status(status).json({
+      code: status,
+      codeName: (error as { codeName?: string }).codeName ?? "MARKET_UNAVAILABLE",
+      message: error instanceof Error ? error.message : "Không kết nối được market",
+    });
     return;
   }
   if (!entitlements) {
