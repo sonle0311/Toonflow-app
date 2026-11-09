@@ -62,7 +62,8 @@ export function detectLocale(languages: readonly string[]): Locale {
     const locale = normalizeLocale(language);
     if (locale) return locale;
   }
-  return "en";
+  // ACT: sản phẩm hướng thị trường Việt Nam; ngôn ngữ hệ thống không khớp thì mặc định tiếng Việt.
+  return "vi";
 }
 
 export function isRtlLocale(locale: Locale): boolean { return ["ar", "fa", "ur"].includes(locale); }
