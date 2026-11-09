@@ -1,0 +1,10 @@
+Use case: precise-object-edit / background-extraction.
+Input image 1 is the approved SL Studio E+M identity sheet. Extract and clean the selected LOGO SYMBOL ONLY into a standalone production master on a genuinely transparent background.
+
+The exact selected mark is the large symbol on the RIGHT side of the sheet, ABOVE the words "SL Studio": lowercase connected cursive "sl" signature inside an oblique elliptical wrapping CINEMA FILM STRIP. Keep the approved shapes and proportions faithfully. The s has a low oval loop on the left, the l has a tall narrow loop rising to upper right and a sweeping rounded right terminal. The film upper/back arc sweeps up from lower left to the top right, the lower/front arc is red and sweeps beneath the signature, ending in a short rectangular red tail at lower right. Broad rectangular sprocket holes along the film edges are transparent cutouts. Keep filmstrip and signature clearly separated by transparent negative space.
+
+Remove EVERYTHING else: no off-white background, no app tile, no headers, no "SL Studio" text, no presentation sheet, no little example logos, no frame. ONLY ONE instance of the approved cursive-sl-with-film symbol.
+Reproduce the symbol, do not invent a new mark or change the handwriting.
+Two absolutely FLAT solid fills only: signature and rear film arc in near-black #151719; lower/front film and trailing tail in cinematic red #E64439. No additional colors or shades. Keep transparent holes and counters clean and genuinely transparent, not painted white. No shadows, gradients, texture, lighting, outlines, off-white edging or glow.
+
+Composition: square 1536x1536 or 1024x1024 canvas, mark centered, proportional, taking about 84 percent of the canvas width and height with even clear transparent margin. Strong anti-aliased edges, faithful shape reproduction, high-resolution vector-like flat geometry suitable for tracing to SVG. Every part of the symbol fully inside the image, no clipping. Preserve the original sl loops and original film ribbon construction exactly.

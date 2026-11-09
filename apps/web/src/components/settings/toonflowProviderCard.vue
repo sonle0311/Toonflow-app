@@ -55,7 +55,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from "vue";
 import { IconCircleCheck, IconEye } from "@tabler/icons-vue";
-import logoUrl from "@toonflow/assets/logo.svg";
+import logoUrl from "@toonflow/assets/toonflowLogo.svg";
 import { toonflowAccountToken } from "@/stores/settings";
 
 const props = defineProps<{ scope: "text" | "media"; provider?: { models: unknown[]; loadError?: string } }>();

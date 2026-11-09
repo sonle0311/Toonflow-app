@@ -155,7 +155,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { translate } from "@toonflow/i18n/vue";
 import { IconChartBar, IconCreditCard, IconExternalLink, IconGift, IconLogout, IconRefresh, IconWallet } from "@tabler/icons-vue";
-import logoUrl from "@toonflow/assets/logo.svg";
+import logoUrl from "@toonflow/assets/toonflowLogo.svg";
 import type { Captcha, Login, PreviewData, UsageStatistics } from "@toonflow/server/channel";
 import http from "@/lib/http";
 import { refreshToonflowProvider, saveSettings, settings, toonflowProviderError, toonflowProviderLoading } from "@/stores/settings";
