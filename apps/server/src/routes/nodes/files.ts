@@ -11,6 +11,10 @@ const router = Router();
 
 export default router.get("/", validateFields({ name: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }, "query"), async (req, res) => {
   const name = req.query.name as string;
+  const entitlements = res.locals.entitlements as { plugins: string[] } | undefined;
+  if (entitlements && !entitlements.plugins.includes("*") && !entitlements.plugins.includes(name)) {
+    return res.status(403).json(error("Node không nằm trong gói hiện tại", null, 403));
+  }
   const nodesDirectory = resolve(dirname(u.conf.path), "nodes");
   const filePath = resolve(nodesDirectory, `${name}.umd.js`);
   const file = await lstat(filePath).catch((err: NodeJS.ErrnoException) => {

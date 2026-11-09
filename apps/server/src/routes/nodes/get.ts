@@ -33,5 +33,8 @@ export default router.get("/", async (req, res) => {
         canConfigure,
       };
     }));
-  res.json(success(nodes.filter((node) => node !== null)));
+  // ACT: bản đóng chỉ mở node nằm trong gói hiện tại ("*" = toàn bộ).
+  const entitlements = res.locals.entitlements as { plugins: string[] } | undefined;
+  const allowed = (name: string) => !entitlements || entitlements.plugins.includes("*") || entitlements.plugins.includes(name);
+  res.json(success(nodes.filter((node) => node !== null && allowed(node.name))));
 });

@@ -119,6 +119,15 @@ export async function createApp({
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ extended: true, limit: "100mb" }));
   app.use("/api/desktop", desktopRequest);
+  const { marketGate } = await import("@/lib/marketGate");
+  app.use(marketGate);
+  // ACT: bản phát hành đóng chỉ dùng plugin từ market; quản trị viên có thể bật lại khi cần.
+  app.use(["/api/nodes/install", "/api/nodes/save", "/api/nodes/setEnabled", "/api/nodes/uninstall",
+    "/api/tools/install", "/api/tools/save", "/api/tools/setEnabled", "/api/tools/uninstall",
+    "/api/ext/install", "/api/ext/save", "/api/ext/setEnabled", "/api/ext/uninstall"], (req, res, next) => {
+    if (process.env.MARKET_ALLOW_PLUGIN_ADMIN === "1") return next();
+    res.status(403).json({ code: 403, codeName: "MARKET_CLOSED_INSTALL", message: "Bản phát hành này chỉ cài plugin từ market" });
+  });
 
   const router = await import("@/router");
   router.default(app);

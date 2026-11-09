@@ -1,6 +1,9 @@
 import { parse as parseScript, parseExpression } from "@babel/parser";
 import type { Node, Expression, ObjectExpression, ObjectProperty } from "@babel/types";
 import { baseParse, NodeTypes, type TemplateChildNode } from "@vue/compiler-dom";
+
+// ACT: baseParse mặc định không coi thẻ HTML rỗng là void; template SFC cần danh sách này.
+const htmlVoidTags = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
 import { parse as parseSfc } from "@vue/compiler-sfc";
 import MagicString from "magic-string";
 import { escapeMessageText } from "./messageText.ts";
@@ -212,7 +215,7 @@ function analyze(source: string, id: string) {
   }
 
   function visitTemplate(code: string, offset: number) {
-    const root = baseParse(code, { comments: true });
+    const root = baseParse(code, { comments: true, isVoidTag: (tag: string) => htmlVoidTags.has(tag.toLowerCase()) });
     function visitChildren(children: TemplateChildNode[]) {
       for (let index = 0; index < children.length; index++) {
         const node = children[index]!;
