@@ -2,8 +2,8 @@
   <div class="marketGate">
     <div class="panel">
       <header class="brand">
-        <span class="logo">T</span>
-        <span class="name">Toonflow</span>
+        <img class="logo" :src="logoUrl" :alt="appName">
+        <span class="name">{{ appName }}</span>
       </header>
 
       <template v-if="mode === 'login'">
@@ -55,6 +55,8 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
+import logoUrl from "@toonflow/assets/logo.svg";
+import { appName } from "@/lib/branding";
 
 type MarketStatus = { loggedIn: boolean; email: string; plan: string; planName: string; expiresAt: number };
 type Plan = { code: string; name: string; price: number; periodDays: number };
@@ -163,7 +165,7 @@ if (props.mode === "paywall") void loadPaywall();
 .marketGate { min-height: 100svh; display: grid; place-items: center; background: #121212; color: #e8e8e8; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
 .panel { width: min(440px, calc(100vw - 32px)); background: #1b1b1b; border: 1px solid #2a2a2a; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 14px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
-.logo { width: 28px; height: 28px; border-radius: 8px; background: #409eff; color: #fff; display: grid; place-items: center; }
+.logo { width: 30px; height: 30px; object-fit: contain; }
 h1 { font-size: 20px; margin: 4px 0 0; }
 .hint { color: #9a9a9a; font-size: 13px; margin: 0; }
 form { display: flex; flex-direction: column; gap: 12px; }
