@@ -79,8 +79,11 @@ function writeEntitlementCache(value: MarketEntitlements) {
   }
 }
 
+// ACT: bản phát hành trỏ về market thật; dev có thể override bằng MARKET_BASE_URL.
+const defaultMarketBaseUrl = "https://market.sonlt.dev";
+
 function marketBaseUrl() {
-  return (process.env.MARKET_BASE_URL ?? "http://127.0.0.1:4100").replace(/\/+$/, "");
+  return (process.env.MARKET_BASE_URL || defaultMarketBaseUrl).replace(/\/+$/, "");
 }
 
 export function readSession(): MarketSession | undefined {
