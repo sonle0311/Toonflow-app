@@ -7,6 +7,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, writeAtomicSync } from "@toonflow/file";
 import { file } from "@toonflow/file/bun";
 import { resolve } from "node:path";
+import { homedir } from "node:os";
 import { promisify } from "node:util";
 import { dlopen, ptr } from "bun:ffi";
 import type { DesktopRuntime, PluginInstallRequest } from "@toonflow/server/desktop";
@@ -435,7 +436,13 @@ async function start() {
         return path ?? null;
       },
       async selectDirectory() {
-        const [path] = await Utils.openFileDialog({ canChooseFiles: false, canChooseDirectory: true, allowsMultipleSelection: false });
+        // ACT: mặc định "~/" bị hiểu là đường dẫn tương đối nên dialog mở vào Contents/MacOS; truyền đường dẫn tuyệt đối.
+        const [path] = await Utils.openFileDialog({
+          startingFolder: homedir(),
+          canChooseFiles: false,
+          canChooseDirectory: true,
+          allowsMultipleSelection: false,
+        });
         return path ?? null;
       },
       async ready(failed = false) {
