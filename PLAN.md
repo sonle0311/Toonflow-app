@@ -216,8 +216,10 @@ audit_logs       (id, actor, action, target, at)
 | UI đăng nhập + paywall + mua gói | ✅ | commit `6aab8651`; flow Pro → QR → webhook → mở khoá |
 | Add-on: catalog, mua, license, watermark | ✅ | commit `babd9d41` (app), `32c9b24` (market) |
 | Admin tối thiểu (users/orders/grant/addon) | ✅ | `toonflow-market` commit `4fc1452` |
-| Branding (tên, bundle id, icon) | ⏳ chờ tên thương hiệu |
-| Installer + update feed | ⏳ cần build trên Windows/macOS |
+| Branding (tên, bundle id, icon) | ✅ env-driven (`VITE_APP_NAME`, `APP_NAME`, `APP_IDENTIFIER`); ẩn link/QR Toonflow |
+| Installer macOS | ✅ `bun run --cwd apps/desktop build` → `build/desktop/app/stable-macos-arm64/toonflow.app` (61MB) + `artifacts/macArm64/*.tar.zst` + update.json |
+| Installer Windows | ⏳ cần build trên Windows |
+| Hướng dẫn triển khai | ✅ `docs/DEPLOY.md` (systemd, Caddy, SePay, admin, build, checklist) |
 | SePay production | ⏳ cần tài khoản + `SEPAY_*` thật |
 
 ### Biến môi trường mới
