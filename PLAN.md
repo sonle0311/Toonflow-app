@@ -225,6 +225,9 @@ audit_logs       (id, actor, action, target, at)
 | Hướng dẫn triển khai | ✅ `docs/DEPLOY.md` (systemd, Caddy, SePay, admin, build, checklist) |
 | Update feed | ✅ publish macOS 2.0.0 → `update.json` + `.tar.zst` phục vụ 200 (62.7MB) |
 | QA end-to-end | ✅ đăng ký qua UI → trial 3 node → hết hạn → paywall → mua Basic → mở khoá 9 node |
+| Desktop UX sau đăng ký | ✅ bỏ trang tài khoản Toonflow (vào thẳng Home); splash đóng đúng; tiêu đề cửa sổ "SL Studio" |
+| Giới hạn thiết bị khi đăng nhập | ✅ 409 trả danh sách thiết bị, gỡ ngay trên màn hình đăng nhập rồi tự đăng nhập lại; trial nâng 2 máy |
+| Localization macOS | ✅ bỏ zh-Hans, khai báo en+vi; dialog hệ thống không còn tiếng Trung; dialog chọn thư mục mở tại Home |
 | Giới hạn thiết bị (D15) | ✅ `devices` enforce `maxDevices`; thiết bị thứ 3 → 409 `DEVICE_LIMIT`; endpoint gỡ thiết bị |
 | Offline grace 7 ngày + heartbeat 6h | ✅ market tắt → `offline:true`, entitlement cache vẫn mở app; heartbeat định kỳ |
 | Xác minh license offline | ✅ JWKS lưu local, verify ES256 khi offline; sửa cache → vẫn trả claim gốc; license hỏng → fail closed |
