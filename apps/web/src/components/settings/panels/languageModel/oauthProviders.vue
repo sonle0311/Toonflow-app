@@ -1,44 +1,44 @@
 <template>
-  <section class="oauthSection" aria-label="Pi 登录供应商">
+  <section class="oauthSection" :aria-label="translate('Pi 登录供应商')">
     <header class="oauthHeader">
       <div class="oauthHeading">
-        <el-text tag="strong">Pi 登录供应商</el-text>
-        <el-text size="small" type="info">使用订阅账号登录，无需填写 API Key</el-text>
+        <el-text tag="strong">{{ translate("Pi 登录供应商") }}</el-text>
+        <el-text size="small" type="info">{{ translate("使用订阅账号登录，无需填写 API Key") }}</el-text>
       </div>
-      <el-button text size="small" :icon="IconRefresh" :loading="loading" @click="load">刷新</el-button>
+      <el-button text size="small" :icon="IconRefresh" :loading="loading" @click="load">{{ translate("刷新") }}</el-button>
     </header>
     <div v-if="providers.length" class="oauthList">
       <div v-for="item in providers" :key="item.id" class="oauthItem">
         <div class="oauthInfo">
           <span class="oauthName">{{ item.name }}</span>
-          <el-tag v-if="item.isSubscription" size="small" type="success" effect="plain">订阅</el-tag>
-          <el-tag v-if="item.loggedIn" size="small" type="info" effect="plain">已登录</el-tag>
-          <el-text size="small" type="info">{{ item.models.length }} 个模型</el-text>
+          <el-tag v-if="item.isSubscription" size="small" type="success" effect="plain">{{ translate("订阅") }}</el-tag>
+          <el-tag v-if="item.loggedIn" size="small" type="info" effect="plain">{{ translate("已登录") }}</el-tag>
+          <el-text size="small" type="info">{{ translate("{0} 个模型", { 0: item.models.length }) }}</el-text>
         </div>
         <el-button size="small" :type="item.loggedIn ? undefined : 'primary'" :loading="pendingId === item.id" @click="item.loggedIn ? logout(item) : login(item)">
-          {{ item.loggedIn ? "退出登录" : "登录" }}
+          {{ item.loggedIn ? translate("退出登录") : translate("登录") }}
         </el-button>
       </div>
     </div>
-    <el-text v-else-if="!loading" size="small" type="info">当前 pi 版本没有可登录的供应商</el-text>
+    <el-text v-else-if="!loading" size="small" type="info">{{ translate("当前 pi 版本没有可登录的供应商") }}</el-text>
 
-    <el-dialog v-model="dialogVisible" :title="`登录 ${active?.name ?? ''}`" width="min(520px, 92vw)" alignCenter appendToBody :closeOnClickModal="false" @closed="stopPolling">
+    <el-dialog v-model="dialogVisible" :title="translate('登录 {0}', { 0: active?.name ?? '' })" width="min(520px, 92vw)" alignCenter appendToBody :closeOnClickModal="false" @closed="stopPolling">
       <div class="oauthDialog">
-        <el-alert v-if="session?.state === 'error'" :title="session.error || '登录失败'" type="error" :closable="false" showIcon />
+        <el-alert v-if="session?.state === 'error'" :title="session.error || translate('登录失败')" type="error" :closable="false" showIcon />
         <template v-else>
-          <el-text size="small">1. 在浏览器中打开登录页面并完成授权</el-text>
-          <el-button type="primary" tag="a" :href="session?.url || undefined" target="_blank" rel="noopener noreferrer" :disabled="!session?.url">打开登录页面</el-button>
+          <el-text size="small">{{ translate("1. 在浏览器中打开登录页面并完成授权") }}</el-text>
+          <el-button type="primary" tag="a" :href="session?.url || undefined" target="_blank" rel="noopener noreferrer" :disabled="!session?.url">{{ translate("打开登录页面") }}</el-button>
           <template v-if="session?.userCode">
-            <el-text size="small">2. 在登录页面输入一次性代码</el-text>
+            <el-text size="small">{{ translate("2. 在登录页面输入一次性代码") }}</el-text>
             <el-text class="oauthCode" tag="strong">{{ session.userCode }}</el-text>
           </template>
-          <el-text size="small" type="info">若浏览器无法回调本机，可粘贴授权码或回调地址：</el-text>
+          <el-text size="small" type="info">{{ translate("若浏览器无法回调本机，可粘贴授权码或回调地址：") }}</el-text>
           <div class="oauthCodeRow">
-            <el-input v-model="manualCode" placeholder="授权码或回调地址" clearable @keyup.enter="submitCode" />
-            <el-button :disabled="!manualCode.trim()" @click="submitCode">提交</el-button>
+            <el-input v-model="manualCode" :placeholder="translate('授权码或回调地址')" clearable @keyup.enter="submitCode" />
+            <el-button :disabled="!manualCode.trim()" @click="submitCode">{{ translate("提交") }}</el-button>
           </div>
-          <el-text v-if="session?.state === 'waiting'" size="small" type="info">等待授权完成…</el-text>
-          <el-text v-else-if="session?.state === 'done'" size="small" type="success">登录成功，正在同步模型…</el-text>
+          <el-text v-if="session?.state === 'waiting'" size="small" type="info">{{ translate("等待授权完成…") }}</el-text>
+          <el-text v-else-if="session?.state === 'done'" size="small" type="success">{{ translate("登录成功，正在同步模型…") }}</el-text>
         </template>
       </div>
     </el-dialog>
@@ -50,6 +50,7 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import axios from "axios";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { IconRefresh } from "@tabler/icons-vue";
+import { translate } from "@toonflow/i18n/vue";
 import { customProviders, saveSettings, type CustomProvider } from "@/stores/settings";
 
 type OAuthProvider = {
@@ -71,13 +72,17 @@ const manualCode = ref("");
 const dialogVisible = ref(false);
 let polling: ReturnType<typeof setInterval> | undefined;
 
+function errorText(error: unknown, fallback: string) {
+  return axios.isAxiosError(error) ? String(error.response?.data?.message ?? error.message) : fallback;
+}
+
 async function load() {
   loading.value = true;
   try {
     const { data } = await axios.get<{ code: number; data: OAuthProvider[] }>("/api/providers/oauth/list");
     providers.value = data.data;
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? String(error.response?.data?.message ?? error.message) : "读取登录供应商失败");
+    ElMessage.error(errorText(error, translate("读取登录供应商失败")));
   } finally {
     loading.value = false;
   }
@@ -108,7 +113,7 @@ async function finish(provider: OAuthProvider) {
     });
   }
   await load();
-  ElMessage.success(`${provider.name} 登录成功`);
+  ElMessage.success(translate("登录成功"));
   dialogVisible.value = false;
 }
 
@@ -139,7 +144,7 @@ async function login(provider: OAuthProvider) {
     dialogVisible.value = true;
     startPolling(provider);
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? String(error.response?.data?.message ?? error.message) : "启动登录失败");
+    ElMessage.error(errorText(error, translate("启动登录失败")));
   } finally {
     pendingId.value = "";
   }
@@ -152,13 +157,15 @@ async function submitCode() {
     await axios.post("/api/providers/oauth/code", { id: session.value.id, code });
     manualCode.value = "";
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? String(error.response?.data?.message ?? error.message) : "提交授权码失败");
+    ElMessage.error(errorText(error, translate("提交授权码失败")));
   }
 }
 
 async function logout(provider: OAuthProvider) {
   try {
-    await ElMessageBox.confirm(`确定退出 ${provider.name} 登录？相关模型将不可用。`, "退出登录", { type: "warning", confirmButtonText: "退出", cancelButtonText: "取消" });
+    await ElMessageBox.confirm(translate("确定退出 {0} 登录？相关模型将不可用。", { 0: provider.name }), translate("退出登录"), {
+      type: "warning", confirmButtonText: translate("退出"), cancelButtonText: translate("取消"),
+    });
   } catch {
     return;
   }
@@ -171,7 +178,7 @@ async function logout(provider: OAuthProvider) {
     });
     await load();
   } catch (error) {
-    ElMessage.error(axios.isAxiosError(error) ? String(error.response?.data?.message ?? error.message) : "退出登录失败");
+    ElMessage.error(errorText(error, translate("退出登录失败")));
   } finally {
     pendingId.value = "";
   }
