@@ -135,6 +135,7 @@ declare module 'vue' {
     SingleAgentDialog: typeof import('./../components/singleAgentDialog.vue')['default']
     SkillMenu: typeof import('./../components/agent/skillMenu.vue')['default']
     SmsCodeButton: typeof import('./../components/settings/panels/account/smsCodeButton.vue')['default']
+    Store: typeof import('./../components/settings/panels/store/index.vue')['default']
     SubAccounts: typeof import('./../components/settings/panels/account/subAccounts.vue')['default']
     TaskRecords: typeof import('./../components/settings/panels/account/taskRecords.vue')['default']
     ToolMessage: typeof import('./../components/agent/toolMessage.vue')['default']

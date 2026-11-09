@@ -80,6 +80,14 @@ const allSettingsPanels = [
     groupLabel: "市场",
     component: defineAsyncComponent(() => import("./panels/pluginMarket/index.vue")),
   },
+  // ACT: cửa hàng add-on của bản độc lập, luôn hiển thị vì đi qua market service của mình.
+  {
+    id: "store",
+    label: "Cửa hàng",
+    icon: IconBuildingStore,
+    groupLabel: "市场",
+    component: defineAsyncComponent(() => import("./panels/store/index.vue")),
+  },
   { id: "mcp", label: "MCP", icon: IconPlugConnected, groupLabel: "通讯", component: defineAsyncComponent(() => import("./panels/mcp/index.vue")) },
   { id: "network", label: "网络设置", icon: IconNetwork, component: defineAsyncComponent(() => import("./panels/network/index.vue")) },
   ...(!isMobile

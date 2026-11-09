@@ -16,6 +16,7 @@ export type MarketEntitlements = {
   planName: string;
   expiresAt: number;
   plugins: string[];
+  addons: string[];
   maxDevices: number;
   license: string;
 };
@@ -156,8 +157,43 @@ export async function getOrder(code: string) {
   return marketFetch<{ code: string; status: string; amount: number; paidAt?: number | null }>(`/orders/${encodeURIComponent(code)}`, { token });
 }
 
-/** True khi plugin được cấp trong gói hiện tại ("*" = mọi plugin). */
+/** True khi plugin được cấp trong gói hiện tại hoặc đã mua như add-on ("*" = mọi plugin). */
 export function isPluginAllowed(entitlements: MarketEntitlements | null, name: string) {
   if (!entitlements) return false;
-  return entitlements.plugins.includes("*") || entitlements.plugins.includes(name);
+  return entitlements.plugins.includes("*") || entitlements.plugins.includes(name) || entitlements.addons.includes(name);
+}
+
+export type MarketAddon = { slug: string; name: string; type: string; price: number; description: string; owned: boolean };
+
+export async function listAddons(): Promise<MarketAddon[]> {
+  const session = readSession();
+  const token = session ? await ensureAccessToken(session) : undefined;
+  return marketFetch<MarketAddon[]>("/addons", { token });
+}
+
+export async function createAddonOrder(slug: string) {
+  const session = readSession();
+  if (!session) throw Object.assign(new Error("Chưa đăng nhập"), { status: 401 });
+  const token = await ensureAccessToken(session);
+  return marketFetch<{ code: string; amount: number; addonSlug: string; qrUrl: string | null; expiresIn: number }>("/orders", {
+    method: "POST", token, body: JSON.stringify({ addonSlug: slug }),
+  });
+}
+
+/** Tải bundle add-on (đã watermark) và ghi vào data/nodes để dùng ngay. */
+export async function installAddon(slug: string) {
+  if (!/^[a-z][a-z0-9-]{1,59}$/.test(slug)) throw Object.assign(new Error("Mã add-on không hợp lệ"), { status: 400 });
+  const session = readSession();
+  if (!session) throw Object.assign(new Error("Chưa đăng nhập"), { status: 401 });
+  const token = await ensureAccessToken(session);
+  const response = await fetch(`${marketBaseUrl()}/addons/${encodeURIComponent(slug)}/download`, { headers: { authorization: `Bearer ${token}` } });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { message?: string };
+    throw Object.assign(new Error(body?.message || `Không tải được add-on (${response.status})`), { status: response.status });
+  }
+  const source = await response.text();
+  const nodesDirectory = resolve(dirname(conf.path), "nodes");
+  mkdirSync(nodesDirectory, { recursive: true });
+  writeFileSync(resolve(nodesDirectory, `${slug}.umd.js`), source);
+  return { slug, bytes: source.length };
 }
