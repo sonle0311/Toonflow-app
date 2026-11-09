@@ -8,11 +8,12 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      redirect: () => publicWeb.value ? "/home" : "/hello",
+      // ACT: bản độc lập không dùng tài khoản Toonflow; vào thẳng trang chủ.
+      redirect: () => "/home",
     },
     {
       path: "/hello",
-      beforeEnter: async () => publicWeb.value || await useHelloStore().load() ? { path: "/home", replace: true } : true,
+      beforeEnter: () => ({ path: "/home", replace: true }),
       component: () => import("@/pages/hello/index.vue"),
     },
     {

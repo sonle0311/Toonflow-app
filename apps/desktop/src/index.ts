@@ -16,7 +16,10 @@ import { parseInstallUrl } from "./protocol";
 import saveFile, { selectSaveFile } from "./saveFile";
 import createWindowsUpdater, { confirmWindowsUpdateStartup } from "./update/windowsUpdater";
 import showWindowsNotification from "./windowsNotification";
+import config from "../../../electrobun.config";
 
+// ACT: tiêu đề cửa sổ theo thương hiệu build (APP_NAME), mặc định "toonflow".
+const appDisplayName = config.app.name;
 const execFileAsync = promisify(execFile);
 const pendingInstalls: PluginInstallRequest[] = [];
 let deliverInstall: ((request: PluginInstallRequest) => void) | undefined;
@@ -188,7 +191,7 @@ async function start() {
     const width = Math.min(1280, workArea.width - 64);
     const height = Math.min(960, workArea.height - 64);
     const mainWindow = new BrowserWindow({
-      title: "Toonflow",
+      title: appDisplayName,
       url: getMainWindowUrl(connection.port, connection.remote, connection.hostMode),
       navigationRules: JSON.stringify(getNavigationRules(connection.port)),
       // ACT: Windows SDK 未接管普通新窗口请求，在创建 WebView 弹窗前交给宿主。
@@ -322,7 +325,7 @@ async function start() {
         const creationWidth = Math.min(1100, workArea.width - 64);
         const creationHeight = Math.min(800, workArea.height - 64);
         const opened = creationWindow = new BrowserWindow({
-          title: "Toonflow",
+          title: appDisplayName,
           url: "http://127.0.0.1:10888/#/home",
           navigationRules: JSON.stringify(getNavigationRules(10888)),
           sandbox: true,
