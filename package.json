@@ -16,8 +16,8 @@
   "packageManager": "bun@1.4.3",
   "patchedDependencies": {
     "@vue-flow/core@1.48.2": "patches/vueFlowCore.patch",
-    "@earendil-works/pi-agent-core@0.85.1": "patches/piAgentCore.patch",
-    "@earendil-works/pi-coding-agent@0.85.1": "patches/piCodingAgent.patch"
+    "@earendil-works/pi-agent-core@1.5.0": "patches/piAgentCore.patch",
+    "@earendil-works/pi-coding-agent@1.5.0": "patches/piCodingAgent.patch"
   },
   "workspaces": [
     "apps/*",

@@ -1,7 +1,7 @@
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
-import type { AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
+import { normalizeContext, type AssistantMessage, type Context, type Model } from "@earendil-works/pi-ai";
 import { z } from "zod";
 import { readReference } from "@/utils/media/generation";
 import { createFileTransport, getUnsupportedFileText, type FileProvider } from "@/utils/ai/files";
@@ -169,7 +169,7 @@ export function streamAi(
       // ACT: 对外只留逻辑身份；同一路由版本进入 SDK 时恢复内部身份，避免工具循环误判跨模型而丢弃推理签名。
       ? { ...message, provider: model.provider, model: model.id } : message),
   } : context;
-  const stream = aiApis[provider.protocol].streamSimple(model, requestContext, {
+  const stream = aiApis[provider.protocol].streamSimple(model, normalizeContext(requestContext), {
     apiKey: provider.apiKey,
     headers: provider.headers,
     signal,

@@ -473,11 +473,12 @@ export function useNodeAi(options: { onModelsChanged?: () => unknown } = {}) {
     let turns = 0;
     let requests = 0;
     const identity = getNodeModelIdentity(selected);
+    // ACT: pi 1.5 的 AgentContext 不再接收 systemPrompt，system prompt 作为首条 system 消息进入转录。
     const messages = await runAgentLoop([{ role: "user", content: prompt, timestamp: Date.now() }], {
-      systemPrompt: systemPrompt ?? "", messages: [], tools,
+      messages: systemPrompt ? [{ role: "system", content: systemPrompt, timestamp: 0 }] : [], tools,
     }, {
       model, convertToLlm: messages => messages as Message[], toolExecution: "sequential",
-      shouldStopAfterTurn: ({ message }) => ++turns >= 40 || message.stopReason === "length",
+      finishTurn: ({ message }) => ++turns >= 40 || message.stopReason === "length" ? { action: "end" } : undefined,
     }, event => {
       callSignal.throwIfAborted();
       if (event.type === "tool_execution_start") onEvent?.({ type: "toolStart", id: event.toolCallId, name: event.toolName, args: event.args });

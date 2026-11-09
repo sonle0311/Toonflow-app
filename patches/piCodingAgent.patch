@@ -1,9 +1,37 @@
+--- a/dist/core/agent-session.d.ts
++++ b/dist/core/agent-session.d.ts
+@@ -228,12 +228,14 @@ export declare class AgentSession {
+     private _eventListeners;
+     private _isAgentRunActive;
+     private _agentRunAbortRequested;
++    private agentRunAborted;
+     private _idleWaitPromise;
+     private _resolveIdleWait;
+     /** Tracks pending steering messages for UI display. Removed when delivered. */
+     private _steeringMessages;
+     /** Tracks pending follow-up messages for UI display. Removed when delivered. */
+     private _followUpMessages;
++    private queuedMessageModes;
+     /** Messages queued to be included with the next user prompt as context ("asides"). */
+     private _pendingNextTurnMessages;
+     /** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
+@@ -637,6 +639,10 @@ export declare class AgentSession {
+         deliverAs?: "steer" | "followUp";
+         expandPromptTemplates?: boolean;
+     }): Promise<void>;
++    /** Promote one pending user message without rebuilding either queue. */
++    steerQueuedMessage(message: AgentMessage): boolean;
++    /** Remove a pending message by identity, preserving every other queued message. */
++    removeQueuedMessage(message: AgentMessage): "steer" | "followUp" | undefined;
+     /**
+      * Clear all queued messages and return them.
+      * Useful for restoring to editor when user aborts.
 --- a/dist/core/agent-session.js
 +++ b/dist/core/agent-session.js
-@@ -83,12 +83,14 @@ export class AgentSession {
-     _unsubscribeAgent;
+@@ -99,12 +99,14 @@ export class AgentSession {
      _eventListeners = [];
      _isAgentRunActive = false;
+     _agentRunAbortRequested = false;
 +    agentRunAborted = false;
      _idleWaitPromise;
      _resolveIdleWait;
@@ -15,7 +43,7 @@
      /** Messages queued to be included with the next user prompt as context ("asides"). */
      _pendingNextTurnMessages = [];
      /** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
-@@ -362,22 +364,13 @@ export class AgentSession {
+@@ -743,22 +745,13 @@ export class AgentSession {
          // This ensures the UI sees the updated queue state
          if (event.type === "message_start" && event.message.role === "user") {
              this._overflowRecoveryAttempted = false;
@@ -44,43 +72,8 @@
 +                this._emitQueueUpdate();
              }
          }
-         // Emit to extensions first
-@@ -770,16 +763,25 @@ export class AgentSession {
-     // Prompting
-     // =========================================================================
-     async _runAgentPrompt(messages) {
-+        this.agentRunAborted = false;
-         this._isAgentRunActive = true;
-         try {
-             await this.agent.prompt(messages);
--            while (await this._handlePostAgentRun()) {
-+            while (!this.agentRunAborted && await this._handlePostAgentRun() && !this.agentRunAborted) {
-                 await this.agent.continue();
-             }
-         }
-         finally {
-             this._systemPromptOverride = undefined;
-             this._flushPendingBashMessages();
-+            if (this.agentRunAborted) {
-+                const queue = this.agent.getQueuedMessages();
-+                for (const message of [...queue.steering, ...queue.followUp]) {
-+                    if (message.role === "custom" && this.agent.removeQueuedMessage(message)) {
-+                        this._pendingCustomMessages.push(message);
-+                    }
-+                }
-+            }
-             this._flushPendingCustomMessages();
-             await this._emitAgentSettled();
-         }
-@@ -802,6 +804,7 @@ export class AgentSession {
-             });
-             this._retryAttempt = 0;
-         }
-+        if (this.agentRunAborted) return false;
-         if (await this._checkCompaction(msg)) {
-             return true;
-         }
-@@ -1045,32 +1048,36 @@ export class AgentSession {
+         // Emit to extensions first, then notify public listeners.
+@@ -1812,28 +1805,36 @@ export class AgentSession {
       */
      async _queueSteer(text, images) {
          this._steeringMessages.push(text);
@@ -110,12 +103,11 @@
          if (images) {
              content.push(...images);
          }
--        this.agent.followUp({
+-        this.agent.followUp({ role: "user", content, timestamp: Date.now() });
 +        const message = {
-             role: "user",
-             content,
-             timestamp: Date.now(),
--        });
++            role: "user",
++            content,
++            timestamp: Date.now(),
 +        };
 +        this.queuedMessageModes.set(message, "followUp");
 +        this.agent.followUp(message);
@@ -123,7 +115,7 @@
      }
      /**
       * Throw an error if the text is an extension command.
-@@ -1187,6 +1194,36 @@ export class AgentSession {
+@@ -1954,6 +1955,36 @@ export class AgentSession {
              source: "extension",
          });
      }
@@ -160,7 +152,7 @@
      /**
       * Clear all queued messages and return them.
       * Useful for restoring to editor when user aborts.
-@@ -1197,6 +1234,7 @@ export class AgentSession {
+@@ -1964,6 +1995,7 @@ export class AgentSession {
          const followUp = [...this._followUpMessages];
          this._steeringMessages = [];
          this._followUpMessages = [];
@@ -168,39 +160,3 @@
          this.agent.clearAllQueues();
          this._emitQueueUpdate();
          return { steering, followUp };
-@@ -1220,6 +1258,7 @@ export class AgentSession {
-      * Abort current operation and wait for agent to become idle.
-      */
-     async abort() {
-+        this.agentRunAborted = true;
-         this.abortRetry();
-         this.abortCompaction();
-         this.abortBranchSummary();
---- a/dist/core/agent-session.d.ts
-+++ b/dist/core/agent-session.d.ts
-@@ -197,12 +197,14 @@ export declare class AgentSession {
-     private _unsubscribeAgent?;
-     private _eventListeners;
-     private _isAgentRunActive;
-+    private agentRunAborted;
-     private _idleWaitPromise;
-     private _resolveIdleWait;
-     /** Tracks pending steering messages for UI display. Removed when delivered. */
-     private _steeringMessages;
-     /** Tracks pending follow-up messages for UI display. Removed when delivered. */
-     private _followUpMessages;
-+    private queuedMessageModes;
-     /** Messages queued to be included with the next user prompt as context ("asides"). */
-     private _pendingNextTurnMessages;
-     /** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
-@@ -422,6 +424,10 @@ export declare class AgentSession {
-         deliverAs?: "steer" | "followUp";
-         expandPromptTemplates?: boolean;
-     }): Promise<void>;
-+    /** Promote one pending user message without rebuilding either queue. */
-+    steerQueuedMessage(message: AgentMessage): boolean;
-+    /** Remove a pending message by identity, preserving every other queued message. */
-+    removeQueuedMessage(message: AgentMessage): "steer" | "followUp" | undefined;
-     /**
-      * Clear all queued messages and return them.
-      * Useful for restoring to editor when user aborts.

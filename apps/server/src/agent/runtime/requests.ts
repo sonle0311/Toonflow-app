@@ -1,4 +1,5 @@
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, normalizeContext } from "@earendil-works/pi-ai";
+import { contentText } from "@earendil-works/pi-ai/utils/text";
 import { raceWithAbortSignal } from "@earendil-works/pi-ai/utils/abort";
 import type { AssistantMessage, AssistantMessageEvent, ImageContent, Message, TextContent } from "@earendil-works/pi-ai";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
@@ -201,27 +202,33 @@ export function configureAgentRequests(session: AgentSession, limits?: { maxRequ
                 : `[图片附件：${reference.sourcePath}]${reference.note ? `\n${reference.note}` : ""}`;
               content.push({ type: "text", text }, image);
             }
-            messages.push({ ...message, content });
+            messages.push({ ...message, content } as Message);
           }
-          const requestContext = {
-            ...context,
-            // ACT: 仅调整发出的请求，技能与项目规则之后再次声明本轮语言，不改写历史或技能原文。
-            systemPrompt: context.systemPrompt?.includes(languagePrompt)
-              ? `${context.systemPrompt.replace(languagePrompt, "").trimEnd()}\n\n${languagePrompt}`
-              : context.systemPrompt,
-            tools: context.tools?.map(tool => tool.name === "askUser" ? {
-              ...tool,
-              description: `${tool.description}\nUnless the user explicitly changes the communication language, write every title, question, option and field placeholder in the host-selected communication language (${responseLocale}). Translate skill examples into that language. A separate language requested for a creative deliverable does not change the form language. Preserve existing names and technical identifiers.`,
-            } : tool),
-            messages: messages.flatMap<Message>((message, index) => {
-              if (message.role !== "assistant") return [message];
-              const content = invalidThinking.has(contentHash(context.messages[index])) ? message.content.filter(part => part.type !== "thinking") : message.content;
-              const identity = configured?.route && message.provider === configured.publicProviderId && message.model === configured.publicModelId
-                && (message as AssistantMessage & { modelRouteRevision?: unknown }).modelRouteRevision === configured.revision
-                ? { provider: model.provider, model: model.id } : {};
-              return content.length ? [{ ...message, ...identity, content }] : [];
-            }),
-          };
+          // ACT: pi 1.5 将 system prompt 与 tools 折进首条 system 消息，只调整该消息，不改写历史或技能原文。
+          const systemMessage = context.messages[0]?.role === "system" ? context.messages[0] : undefined;
+          const systemText = systemMessage ? contentText(systemMessage.content) : "";
+          const adjustedSystem = systemMessage ? {
+            ...systemMessage,
+            content: systemText.includes(languagePrompt)
+              ? `${systemText.replace(languagePrompt, "").trimEnd()}\n\n${languagePrompt}`
+              : systemText,
+            ...(systemMessage.toolsAdded ? {
+              toolsAdded: systemMessage.toolsAdded.map(tool => tool.name === "askUser" ? {
+                ...tool,
+                description: `${tool.description}\nUnless the user explicitly changes the communication language, write every title, question, option and field placeholder in the host-selected communication language (${responseLocale}). Translate skill examples into that language. A separate language requested for a creative deliverable does not change the form language. Preserve existing names and technical identifiers.`,
+              } : tool),
+            } : {}),
+          } : undefined;
+          const requestMessages = messages.flatMap<Message>((message, index) => {
+            if (message.role !== "assistant") return [message];
+            const content = invalidThinking.has(contentHash(context.messages[index])) ? message.content.filter(part => part.type !== "thinking") : message.content;
+            const identity = configured?.route && message.provider === configured.publicProviderId && message.model === configured.publicModelId
+              && (message as AssistantMessage & { modelRouteRevision?: unknown }).modelRouteRevision === configured.revision
+              ? { provider: model.provider, model: model.id } : {};
+            return content.length ? [{ ...message, ...identity, content }] : [];
+          });
+          if (adjustedSystem) requestMessages[0] = adjustedSystem;
+          const requestContext = normalizeContext({ messages: requestMessages });
           let restart = false;
           const rebuildRequest = new Error("图片上下文已调整，重新构建请求");
           let http413 = false;
@@ -252,7 +259,7 @@ export function configureAgentRequests(session: AgentSession, limits?: { maxRequ
           }
           const request = files.fetch;
           streamSignal.throwIfAborted();
-          const stream = await raceWithAbortSignal(Promise.resolve(streamFunction(model, requestContext, {
+          const stream = await raceWithAbortSignal(Promise.resolve(streamFunction(model, normalizeContext(requestContext), {
             ...options,
             apiKey,
             ...(configured?.route ? { maxRetries: 0, maxTokens: Math.min(options?.maxTokens ?? configured.model.maxOutputTokens, configured.model.maxOutputTokens) } : {}),

@@ -28,6 +28,6 @@
     "@form-create/element-ui": "^3"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.85.1"
+    "@earendil-works/pi-coding-agent": "1.5.0"
   }
 }

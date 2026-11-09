@@ -527,7 +527,7 @@ export async function getAgentSession(cwd: string, path: string) {
                     id: part.id,
                     name: part.name,
                     args: part.arguments,
-                    status: !result || result.details?.toonflowInterrupted === true ? "interrupted" as const : result.isError ? "error" as const : "success" as const,
+                    status: !result || (result.details as { toonflowInterrupted?: unknown } | undefined)?.toonflowInterrupted === true ? "interrupted" as const : result.isError ? "error" as const : "success" as const,
                     result: result ? getToolResultText(result.content) : undefined,
                   },
                 };
