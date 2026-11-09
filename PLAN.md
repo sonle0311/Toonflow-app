@@ -199,8 +199,9 @@ audit_logs       (id, actor, action, target, at)
 - [x] Mua add-on → tải về → watermark đúng user
 - [x] Admin xem đơn, cấp/khoá license tay (UI `/admin` + API)
 - [x] Installer macOS build + update feed hoạt động
-- [ ] Installer Windows (cần môi trường Windows)
-- [ ] SePay production (cần tài khoản + webhook thật)
+- [ ] Installer Windows (chặn: cần máy Windows — electrobun không cross-build)
+- [ ] SePay production (chặn: cần tài khoản SePay + ngân hàng + duyệt webhook)
+- [ ] Tên thương hiệu + bundle id chính thức (chặn: quyết định của chủ sản phẩm)
 
 ---
 
@@ -217,7 +218,7 @@ audit_logs       (id, actor, action, target, at)
 | Gate theo entitlement (trial 3 node) | ✅ | trial → `imageNode,textNode,videoNode`; Pro → 9 node |
 | UI đăng nhập + paywall + mua gói | ✅ | commit `6aab8651`; flow Pro → QR → webhook → mở khoá |
 | Add-on: catalog, mua, license, watermark | ✅ | commit `babd9d41` (app), `32c9b24` (market) |
-| Admin tối thiểu (API + UI) | ✅ | `4fc1452`, `52f4b7f`; UI `/admin` hiển thị users, cấp gói, đơn |
+| Admin tối thiểu (API + UI) | ✅ | UI `/admin`: users, cấp gói, **khoá gói**, đơn hàng; API tương ứng |
 | Branding (tên, bundle id, icon) | ✅ env-driven (`VITE_APP_NAME`, `APP_NAME`, `APP_IDENTIFIER`); ẩn link/QR Toonflow |
 | Installer macOS | ✅ `bun run --cwd apps/desktop build` → `build/desktop/app/stable-macos-arm64/toonflow.app` (61MB) + `artifacts/macArm64/*.tar.zst` + update.json |
 | Installer Windows | ⏳ cần build trên Windows |
