@@ -6,9 +6,10 @@ import type { DesktopRuntime, desktopUpdateAttempt, updateSnapshot } from "@/typ
 import { msg, translateError, translateMessage } from "@/lib/i18n";
 import { messageError } from "@toonflow/i18n/errors";
 
+// ACT: Bản độc lập không mặc định trỏ về Toonflow; cấu hình nguồn cập nhật của bạn qua biến môi trường.
 const updateBaseUrls = {
-  official: "https://api.toonflow.net/web/version/desktopUpdates",
-  github: "https://github.com/HBAI-Ltd/Toonflow-app/releases/latest/download",
+  official: process.env.TOONFLOW_DESKTOP_UPDATE_URL?.trim() ?? "",
+  github: process.env.TOONFLOW_GITHUB_RELEASES_URL?.trim() ?? "",
 };
 const updateRuntimeId = crypto.randomUUID();
 let cancelledUpdateAttempt: string | undefined;
@@ -85,9 +86,11 @@ export function isValidUpdateUrl(value: unknown): value is string {
 
 function getUpdateBaseUrl(): string {
   const settings = conf.get("settings", {});
-  if (settings.desktopUpdateSource === "github") return updateBaseUrls.github;
-  if (settings.desktopUpdateSource === "custom" && isValidUpdateUrl(settings.desktopUpdateCustomUrl)) return settings.desktopUpdateCustomUrl;
-  return updateBaseUrls.official;
+  const source = settings.desktopUpdateSource === "github" ? updateBaseUrls.github
+    : settings.desktopUpdateSource === "custom" && isValidUpdateUrl(settings.desktopUpdateCustomUrl) ? settings.desktopUpdateCustomUrl
+      : updateBaseUrls.official;
+  if (!source) throw Object.assign(new Error("Chưa cấu hình nguồn cập nhật cho bản độc lập (TOONFLOW_DESKTOP_UPDATE_URL hoặc TOONFLOW_GITHUB_RELEASES_URL)"), { status: 400 });
+  return source;
 }
 
 async function withUpdateSource<T>(updater: DesktopRuntime["updater"], updateBaseUrl: string, run: () => Promise<T>) {

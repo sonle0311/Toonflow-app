@@ -9,11 +9,13 @@ export async function createCreationApp(session: UserSession): Promise<App<Eleme
   const [
     { default: appRoot }, { default: router }, { loadSettings, settingsStorage, multiTenantEnabled }, { registerLanguage },
     { registerAnonymousData }, { registerDownloads }, { registerDesktopProtocol }, { registerDesktopAutoUpdate },
+    { loadChannelCapabilities },
   ] = await Promise.all([
     import("@/App.vue"), import("@/router"), import("@/stores/settings"), import("@/lib/i18n"),
     import("@/lib/anonymousData"), import("@/lib/saveFile"), import("@/lib/desktopProtocol"), import("@/stores/desktopUpdate"),
+    import("@/lib/channel"),
   ]);
-  await loadSettings();
+  await Promise.all([loadSettings(), loadChannelCapabilities()]);
   const app = createApp(appRoot);
   app.onUnmount(registerLanguage());
   app.use(createPinia().use(createPersistedState({ storage: settingsStorage })));

@@ -43,6 +43,7 @@ import { computed, defineAsyncComponent, shallowRef, watch } from "vue";
 import userAccount from "@toonflow/multi-tenant-user-web/account";
 import { hasDesktopUpdate } from "@/stores/desktopUpdate";
 import { multiTenantEnabled } from "@/stores/settings";
+import { channelCapabilities } from "@/lib/channel";
 import { currentUser, publicWeb } from "@/stores/multiTenant";
 import http from "@/lib/http";
 import { isMobile } from "@/lib/platform";
@@ -97,6 +98,9 @@ const allSettingsPanels = [
 ];
 const publicAccountPanel = { ...allSettingsPanels[0]!, get label() { return translate("账号"); } };
 const settingsPanels = computed(() => allSettingsPanels.filter(item => {
+  // ACT: Kênh không cung cấp tài khoản/marketplace thì ẩn hẳn mục tương ứng.
+  if (!channelCapabilities.value.account && item.id === "account") return false;
+  if (!channelCapabilities.value.marketplace && item.id === "pluginMarket") return false;
   if (publicWeb.value && currentUser.value?.role === "user") return ["account", "general", "about"].includes(item.id);
   if (publicWeb.value && ["multiTenant", "deviceLink", "network", "mcp", "developer", "pluginMarket"].includes(item.id)) return false;
   return !multiTenantEnabled.value || !["languageModel", "mediaModel", "developer"].includes(item.id);

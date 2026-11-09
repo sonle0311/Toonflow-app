@@ -110,7 +110,7 @@
             </div>
             <div v-else id="projectListContent" class="teamProjects" />
           </section>
-          <div data-home-section="explore"><explore :scrollElement="pageScroll?.wrapRef" /></div>
+          <div v-if="channelCapabilities.explore" data-home-section="explore"><explore :scrollElement="pageScroll?.wrapRef" /></div>
         </el-main>
       </div>
     </el-scrollbar>
@@ -123,6 +123,7 @@
 
 <script setup lang="ts">
 import { locale, translate } from "@toonflow/i18n/vue";
+import { channelCapabilities } from "@/lib/channel";
 import axios from "axios";
 import { storeToRefs } from "pinia";
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -167,11 +168,13 @@ const pageScroll = ref<ScrollbarInstance>();
 const backgroundScrollTop = ref(0);
 const activeSection = ref("home");
 const projectType = ref<"local" | "team">("local");
-const homeSections = [
+const allHomeSections = [
   { id: "home", label: "首页", icon: IconHome },
   { id: "projects", label: "项目", icon: IconFolder },
   { id: "explore", label: "探索", icon: IconCompass },
 ];
+// ACT: Kênh tự chủ không có nội dung khám phá thì bỏ mục này khỏi trang chủ.
+const homeSections = computed(() => allHomeSections.filter(item => item.id !== "explore" || channelCapabilities.value.explore));
 const mobileConnect = defineAsyncComponent(() => import("@/components/mobileConnect.vue"));
 const router = useRouter();
 const pageLifetime = new AbortController();
@@ -363,7 +366,7 @@ async function activateAdvertisement(advertisement: HomeAdvertisement) {
     if (resolved.matched.some(route => route.path === "/home")) {
       await nextTick();
       const section = typeof resolved.query.section === "string" ? resolved.query.section : resolved.hash.slice(1);
-      scrollToSection(homeSections.some(item => item.id === section) ? section : "home");
+      scrollToSection(homeSections.value.some(item => item.id === section) ? section : "home");
     }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "无法打开页面");

@@ -102,6 +102,9 @@ export function registerAnonymousData() {
   }
 
   function report() {
+    // ACT: Bản độc lập không gửi dữ liệu sang Toonflow; chỉ gửi khi cấu hình endpoint riêng.
+    const telemetryUrl = String(import.meta.env.VITE_TELEMETRY_URL ?? "").trim();
+    if (!telemetryUrl) return;
     if (!collecting || !privacySettings.value.dataCollectionEnabled) return;
     accountTime();
     controller?.abort();
@@ -143,7 +146,7 @@ export function registerAnonymousData() {
       agent,
     };
     void axios
-      .post("https://api.toonflow.net/web/telemetry/report", data, {
+      .post(telemetryUrl, data, {
         adapter: "fetch",
         fetchOptions: { keepalive: true, referrerPolicy: "no-referrer" },
         withCredentials: false,

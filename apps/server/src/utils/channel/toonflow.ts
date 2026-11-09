@@ -189,6 +189,9 @@ const homeAdvertisement = z.object({
 });
 
 export class Toonflow implements Channel {
+  readonly id = "toonflow";
+
+  readonly capabilities = { account: true, marketplace: true, explore: true, ads: true };
   private async request<T>(params: {
     path: string; method: "GET" | "POST"; data?: unknown; token?: string; signal?: AbortSignal; timeout?: number; sensitiveValues?: string[];
   }): Promise<T> {

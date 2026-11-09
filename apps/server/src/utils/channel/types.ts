@@ -288,7 +288,20 @@ export type ExploreProcess = {
   }[];
 };
 
+export type ChannelCapabilities = {
+  /** Đăng nhập / đăng ký / tài khoản do kênh cung cấp. */
+  account: boolean;
+  /** Chợ plugin của kênh. */
+  marketplace: boolean;
+  /** Mục khám phá dự án cộng đồng. */
+  explore: boolean;
+  /** Banner quảng cáo trên trang chủ. */
+  ads: boolean;
+};
+
 export interface Channel {
+  readonly id: string;
+  readonly capabilities: ChannelCapabilities;
   getCaptcha(options?: RequestOptions): Promise<Captcha>;
   sendSmsCode(params: SmsParams, options?: RequestOptions): Promise<number>;
   register(params: RegisterParams, options?: RequestOptions): Promise<{ userCode: string }>;
