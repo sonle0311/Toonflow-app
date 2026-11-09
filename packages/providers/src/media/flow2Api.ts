@@ -31,6 +31,7 @@ const modelFamilies = [
   { id: "veo-3.1-lite", label: "Veo 3.1 Lite", type: "video" },
   { id: "veo-3.1-quality", label: "Veo 3.1 Quality", type: "video" },
   { id: "omni-1.1-flash", label: "Omni 1.1 Flash", type: "video" },
+  { id: "omni-1.2-flash", label: "Omni 1.2 Flash", type: "video" },
 ] as const;
 
 export function flowConnection(config: Record<string, unknown>): { baseUrl: string; rootUrl: string; apiKey: string; maxConcurrentVideos: number } {
@@ -75,6 +76,17 @@ export function flowModel(id: string): ProviderModel | undefined {
     const ratio = imageRatios[omni?.[2] ?? "landscape"]!;
     return {
       id, label: `Omni 1.1 Flash · ${duration}s · ${ratio} · auto`, type: "video", mode: ["text", ["imageReference:3"]],
+      imageRatios: [ratio], durationResolutionMap: [{ duration: [duration], resolution: ["auto"] }],
+    };
+  }
+  // ACT: Omni 1.2 Flash sinh 3–15 giây theo từng giây; ID đầy đủ quyết định thời lượng và tỷ lệ.
+  const omni12 = /^omni-1\.2-flash(?:-(\d{1,2})s-(landscape|portrait))?$/.exec(id);
+  if (omni12) {
+    const duration = Number(omni12[1] ?? 8);
+    if (duration < 3 || duration > 15) return undefined;
+    const ratio = imageRatios[omni12[2] ?? "landscape"]!;
+    return {
+      id, label: `Omni 1.2 Flash · ${duration}s · ${ratio} · auto`, type: "video", mode: ["text", ["imageReference:3"]],
       imageRatios: [ratio], durationResolutionMap: [{ duration: [duration], resolution: ["auto"] }],
     };
   }
@@ -440,9 +452,9 @@ export default {
   id: "flow2Api",
   label: "Flow2API",
   icon: "",
-  version: "1.1.0",
+  version: "1.2.0",
   modelsUrl: "http://127.0.0.1:8000/v1/models",
-  readme: "## Flow2API\n\nĐiền API Key máy chủ và địa chỉ gốc, mặc định `http://127.0.0.1:8000`; địa chỉ có `/v1` cũng được chấp nhận. Lấy lại mô hình để hiển thị tối đa 6 nhóm: Nano Banana 2.1, Nano Banana 2 Lite, Veo 3.1 Fast/Lite/Quality và Omni 1.1 Flash. Tỷ lệ, kích thước, chế độ và thời lượng chỉ lấy từ biến thể thực trong `/v1/models`; ID cụ thể cũ vẫn dùng được. Máy chủ cần tài khoản Flow hoạt động và CAPTCHA, kiểm tra qua `/health`.\n\nChọn tỷ lệ và kích thước ảnh (`auto`, `2K`, `4K` theo danh mục). Video chỉ nhận độ phân giải `auto`: Veo văn bản 4/6/8 giây, một ảnh hoặc hai khung 4/6 giây, tham chiếu Fast/Lite 8 giây; Omni 4/6/8/10 giây, văn bản hoặc 1–3 ảnh tham chiếu. Thời lượng là giá trị khai báo, không bảo đảm số giây đầu ra chính xác. Nếu không chọn tham số, dùng lựa chọn thực có trong danh mục.\n\nẢnh dùng URL HTTPS mà máy chủ truy cập được hoặc dữ liệu ảnh thực. Hai khung cần firstFrame và lastFrame đúng thứ tự; không trộn với images. Khi bỏ mode, firstFrame/lastFrame chọn I2V; images chọn tham chiếu nếu hỗ trợ, nếu không chỉ nhận một ảnh đầu. Không tự hiểu hai ảnh tham chiếu là hai khung. Tổng yêu cầu và mỗi tệp tối đa 100 MiB; danh mục ảnh không công bố giới hạn số ảnh. Không hỗ trợ mặt nạ, n khác 1, chất lượng/định dạng đầu ra, âm thanh/video tham chiếu, điều khiển âm thanh, watermark, nối dài hoặc tham số bổ sung.\n\nSố video đồng thời mặc định là 1, có thể chọn số nguyên từ 1 đến 8. Máy chủ Toonflow xếp hàng FIFO theo địa chỉ Flow2API, dùng chung giới hạn cho các yêu cầu tới cùng địa chỉ. Dừng yêu cầu đang xếp hàng sẽ bỏ yêu cầu trước khi gửi POST tạo video. Đây là giới hạn cục bộ của một tiến trình Toonflow, không giới hạn các máy khách khác hay thay đổi hàng đợi của Flow; không bảo đảm tránh được bộ lọc nội dung.\n\nGửi một `/v1/chat/completions` với `stream: false`, không tự gửi lại. Thời hạn chung cho tạo và tải: ảnh gốc 6 phút, ảnh phóng và video 35 phút. Lưu kết quả trước khi URL hết hạn. Dừng chờ hoặc hết hạn sau khi đã gửi không bảo đảm máy chủ đã hủy; kiểm tra kết quả/log trước khi gửi lại. Nếu Flow trả mã lọc nội dung, kiểm tra lời nhắc và ảnh tham chiếu theo mã lỗi; xếp hàng không thay thế việc xử lý lý do bị từ chối.",
+  readme: "## Flow2API\n\nĐiền API Key máy chủ và địa chỉ gốc, mặc định `http://127.0.0.1:8000`; địa chỉ có `/v1` cũng được chấp nhận. Lấy lại mô hình để hiển thị tối đa 7 nhóm: Nano Banana 2.1, Nano Banana 2 Lite, Veo 3.1 Fast/Lite/Quality, Omni 1.1 Flash và Omni 1.2 Flash. Tỷ lệ, kích thước, chế độ và thời lượng chỉ lấy từ biến thể thực trong `/v1/models`; ID cụ thể cũ vẫn dùng được. Máy chủ cần tài khoản Flow hoạt động và CAPTCHA, kiểm tra qua `/health`.\n\nChọn tỷ lệ và kích thước ảnh (`auto`, `2K`, `4K` theo danh mục). Video chỉ nhận độ phân giải `auto`: Veo văn bản 4/6/8 giây, một ảnh hoặc hai khung 4/6 giây, tham chiếu Fast/Lite 8 giây; Omni 1.1 Flash 4/6/8/10 giây và Omni 1.2 Flash 3–15 giây, văn bản hoặc 1–3 ảnh tham chiếu. Thời lượng là giá trị khai báo, không bảo đảm số giây đầu ra chính xác. Nếu không chọn tham số, dùng lựa chọn thực có trong danh mục.\n\nẢnh dùng URL HTTPS mà máy chủ truy cập được hoặc dữ liệu ảnh thực. Hai khung cần firstFrame và lastFrame đúng thứ tự; không trộn với images. Khi bỏ mode, firstFrame/lastFrame chọn I2V; images chọn tham chiếu nếu hỗ trợ, nếu không chỉ nhận một ảnh đầu. Không tự hiểu hai ảnh tham chiếu là hai khung. Tổng yêu cầu và mỗi tệp tối đa 100 MiB; danh mục ảnh không công bố giới hạn số ảnh. Không hỗ trợ mặt nạ, n khác 1, chất lượng/định dạng đầu ra, âm thanh/video tham chiếu, điều khiển âm thanh, watermark, nối dài hoặc tham số bổ sung.\n\nSố video đồng thời mặc định là 1, có thể chọn số nguyên từ 1 đến 8. Máy chủ Toonflow xếp hàng FIFO theo địa chỉ Flow2API, dùng chung giới hạn cho các yêu cầu tới cùng địa chỉ. Dừng yêu cầu đang xếp hàng sẽ bỏ yêu cầu trước khi gửi POST tạo video. Đây là giới hạn cục bộ của một tiến trình Toonflow, không giới hạn các máy khách khác hay thay đổi hàng đợi của Flow; không bảo đảm tránh được bộ lọc nội dung.\n\nGửi một `/v1/chat/completions` với `stream: false`, không tự gửi lại. Thời hạn chung cho tạo và tải: ảnh gốc 6 phút, ảnh phóng và video 35 phút. Lưu kết quả trước khi URL hết hạn. Dừng chờ hoặc hết hạn sau khi đã gửi không bảo đảm máy chủ đã hủy; kiểm tra kết quả/log trước khi gửi lại. Nếu Flow trả mã lọc nội dung, kiểm tra lời nhắc và ảnh tham chiếu theo mã lỗi; xếp hàng không thay thế việc xử lý lý do bị từ chối.",
   rules,
   models: [],
   async generateImage(request: ImageRequest): Promise<MediaAsset[]> { return generate(this, request, "image"); },

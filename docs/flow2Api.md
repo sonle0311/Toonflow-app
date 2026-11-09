@@ -12,9 +12,9 @@ Flow2API được tích hợp trong **Cài đặt → Mô hình đa phương ti�
 
 ## Model và tham số
 
-- Danh sách hiển thị sáu model chính từ danh mục công khai: **Nano Banana 2.1**, **Nano Banana 2 Lite**, **Veo 3.1 Fast**, **Veo 3.1 Lite**, **Veo 3.1 Quality** và **Omni 1.1 Flash**. Model chỉ xuất hiện khi máy chủ cung cấp ít nhất một biến thể được hỗ trợ.
+- Danh sách hiển thị bảy model chính từ danh mục công khai: **Nano Banana 2.1**, **Nano Banana 2 Lite**, **Veo 3.1 Fast**, **Veo 3.1 Lite**, **Veo 3.1 Quality**, **Omni 1.1 Flash** và **Omni 1.2 Flash**. Model chỉ xuất hiện khi máy chủ cung cấp ít nhất một biến thể được hỗ trợ.
 - Với hai model ảnh, chọn tỷ lệ và kích thước **auto / 2K / 4K** trong cấu hình node; hỗ trợ prompt và ảnh tham chiếu. `auto` là đầu ra gốc, không cam kết số pixel.
-- Với Veo, chọn **văn bản → video**, **một ảnh đầu**, **hai khung đầu/cuối** hoặc **ảnh tham chiếu** trong chế độ của node. T2V hỗ trợ 4/6/8 giây; I2V hỗ trợ 4/6 giây; R2V hỗ trợ 8 giây trên Fast/Lite. Omni hỗ trợ 4/6/8/10 giây. Các lựa chọn được lấy theo biến thể thực tế của máy chủ và lọc theo chế độ đã chọn.
+- Với Veo, chọn **văn bản → video**, **một ảnh đầu**, **hai khung đầu/cuối** hoặc **ảnh tham chiếu** trong chế độ của node. T2V hỗ trợ 4/6/8 giây; I2V hỗ trợ 4/6 giây; R2V hỗ trợ 8 giây trên Fast/Lite. Omni 1.1 Flash hỗ trợ 4/6/8/10 giây; Omni 1.2 Flash hỗ trợ 3–15 giây (ID không hợp lệ sẽ bị bỏ qua). Các lựa chọn được lấy theo biến thể thực tế của máy chủ và lọc theo chế độ đã chọn.
 - Các biến thể landscape/portrait, thời lượng và hậu tố 2k/4k là ID định tuyến nội bộ, không hiển thị thành model riêng. Backend chọn đúng ID đang có trong danh mục theo cấu hình trước khi gửi yêu cầu. Cấu hình không có biến thể tương ứng được báo lỗi, không tự thay đổi yêu cầu.
 - Các node từng chọn ID cụ thể được nhận diện qua danh sách alias để chuyển về model chính, giữ các thiết lập hợp lệ. Adapter vẫn nhận ID cụ thể cũ khi được gọi trực tiếp.
 - Video từ văn bản không nhận ảnh. I2V nhận một ảnh đầu hoặc hai ảnh đầu/cuối theo thứ tự. R2V nhận 1–3 ảnh tham chiếu. Omni nhận văn bản hoặc tối đa 3 ảnh.
