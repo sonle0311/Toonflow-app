@@ -192,13 +192,15 @@ audit_logs       (id, actor, action, target, at)
 
 ## 12. Định nghĩa hoàn thành MVP
 
-- [ ] App không còn request nào tới `api.toonflow.net`
-- [ ] Người dùng đăng ký → trial 3 ngày → hết hạn bị khoá
-- [ ] Mua gói bằng SePay → license cấp trong < 2 phút → app mở khoá
-- [ ] Hết hạn → đăng nhập hiện paywall, API trả 402
-- [ ] Mua add-on → tải về → dùng được; watermark đúng user
-- [ ] Admin xem được đơn, cấp/khoá license tay
-- [ ] Installer Windows + macOS chạy được, update feed hoạt động
+- [x] App không còn request nào tới `api.toonflow.net` (headless: 0 request)
+- [x] Người dùng đăng ký → trial 3 ngày → hết hạn bị khoá
+- [x] Mua gói → webhook → license cấp → app mở khoá (SePay thật chờ credentials)
+- [x] Hết hạn → đăng nhập hiện paywall, API trả 402
+- [x] Mua add-on → tải về → watermark đúng user
+- [x] Admin xem đơn, cấp/khoá license tay (UI `/admin` + API)
+- [x] Installer macOS build + update feed hoạt động
+- [ ] Installer Windows (cần môi trường Windows)
+- [ ] SePay production (cần tài khoản + webhook thật)
 
 ---
 
@@ -215,11 +217,13 @@ audit_logs       (id, actor, action, target, at)
 | Gate theo entitlement (trial 3 node) | ✅ | trial → `imageNode,textNode,videoNode`; Pro → 9 node |
 | UI đăng nhập + paywall + mua gói | ✅ | commit `6aab8651`; flow Pro → QR → webhook → mở khoá |
 | Add-on: catalog, mua, license, watermark | ✅ | commit `babd9d41` (app), `32c9b24` (market) |
-| Admin tối thiểu (users/orders/grant/addon) | ✅ | `toonflow-market` commit `4fc1452` |
+| Admin tối thiểu (API + UI) | ✅ | `4fc1452`, `52f4b7f`; UI `/admin` hiển thị users, cấp gói, đơn |
 | Branding (tên, bundle id, icon) | ✅ env-driven (`VITE_APP_NAME`, `APP_NAME`, `APP_IDENTIFIER`); ẩn link/QR Toonflow |
 | Installer macOS | ✅ `bun run --cwd apps/desktop build` → `build/desktop/app/stable-macos-arm64/toonflow.app` (61MB) + `artifacts/macArm64/*.tar.zst` + update.json |
 | Installer Windows | ⏳ cần build trên Windows |
 | Hướng dẫn triển khai | ✅ `docs/DEPLOY.md` (systemd, Caddy, SePay, admin, build, checklist) |
+| Update feed | ✅ publish macOS 2.0.0 → `update.json` + `.tar.zst` phục vụ 200 (62.7MB) |
+| QA end-to-end | ✅ đăng ký qua UI → trial 3 node → hết hạn → paywall → mua Basic → mở khoá 9 node |
 | SePay production | ⏳ cần tài khoản + `SEPAY_*` thật |
 
 ### Biến môi trường mới
