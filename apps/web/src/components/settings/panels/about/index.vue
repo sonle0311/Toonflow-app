@@ -1,9 +1,9 @@
 <template>
   <div class="about">
     <div class="brand">
-      <div class="brandMark"><img class="brandLogo" :src="logoUrl" alt="Toonflow Logo" /></div>
+      <div class="brandMark"><img class="brandLogo" :src="logoUrl" :alt="`${appName} Logo`" /></div>
       <div class="brandInfo">
-        <h3>Toonflow</h3>
+        <h3>{{ appName }}</h3>
         <div class="brandMeta">
           <span v-if="currentVersion">v{{ currentVersion }}</span>
           <el-tag v-if="clientBuild?.channel || snapshot?.channel" type="info" size="small" round>{{ clientBuild?.channel || snapshot?.channel }}</el-tag>
@@ -57,8 +57,8 @@
       </div>
     </el-card>
 
-    <el-card class="infoCard repositoryCard" shadow="never">
-      <a class="repositoryLink" :href="repositoryUrl" target="_blank" rel="noopener noreferrer" aria-label="GitHub 仓库：HBAI-Ltd/Toonflow-app">
+    <el-card v-if="repositoryUrl" class="infoCard repositoryCard" shadow="never">
+      <a class="repositoryLink" :href="repositoryUrl" target="_blank" rel="noopener noreferrer" :aria-label="`GitHub 仓库：${repositoryUrl}`">
         <icon-brand-github class="repositoryIcon" :size="22" aria-hidden="true" />
         <div class="repositoryInfo">
           <span class="repositoryTitle">GitHub 仓库</span>
@@ -67,7 +67,7 @@
       </a>
     </el-card>
 
-    <el-card class="infoCard" shadow="never">
+    <el-card v-if="communityUrl" class="infoCard" shadow="never">
       <div class="cardHeader">
         <div class="cardLabel">
           <icon-brand-wechat :size="20" aria-hidden="true" />
@@ -103,7 +103,7 @@
       </div>
     </el-card>
 
-    <section class="sponsorPanel" aria-label="赞助商">
+    <section v-if="sponsors.length" class="sponsorPanel" aria-label="赞助商">
       <h3 class="sponsorTitle">
         <icon-gift :size="20" aria-hidden="true" />
         赞助商
@@ -238,6 +238,7 @@ import {
 import logoUrl from "@toonflow/assets/logo.svg";
 import type { Sponsor } from "@toonflow/server/channel";
 import http from "@/lib/http";
+import { appName, repoUrl, communityUrl as communityUrlFromEnv } from "@/lib/branding";
 import { saveSettings } from "@/stores/settings";
 import {
   desktopAutoUpdate,
@@ -254,8 +255,8 @@ import {
 
 const messageMarkdown = defineAsyncComponent(() => import("@/components/messageMarkdown.vue"));
 const privacy = defineAsyncComponent(() => import("./privacy.vue"));
-const repositoryUrl = "https://github.com/HBAI-Ltd/Toonflow-app";
-const communityUrl = "https://work.weixin.qq.com/u/vc36adcc89845edcbe?v=5.0.3.63936&bb=85b8d228e8";
+const repositoryUrl = repoUrl;
+const communityUrl = communityUrlFromEnv;
 const clientBuild = ref<{ version: string; channel: string }>();
 const currentVersion = computed(() => actualPlatform.isDesktop && actualPlatform.isRemoteConnection
   ? clientBuild.value?.version || "" : snapshot.value?.version || import.meta.env.appVersion);
