@@ -128,6 +128,13 @@ jobs:
       appVersion: ${{ needs.prepare.outputs.version }}
       releaseMode: ${{ inputs.generatePatch && '--auto' || '--initial' }}
       macCodesign: ${{ matrix.platform == 'darwin' && '1' || '0' }}
+      # ACT: thương hiệu bản phát hành; đặt GitHub Variables để đổi mà không sửa workflow.
+      APP_NAME: ${{ vars.APP_NAME || 'SL Studio' }}
+      APP_IDENTIFIER: ${{ vars.APP_IDENTIFIER || 'dev.sonlt.slstudio' }}
+      APP_LOCALES: ${{ vars.APP_LOCALES || 'en,vi' }}
+      VITE_APP_NAME: ${{ vars.APP_NAME || 'SL Studio' }}
+      VITE_REPO_URL: ${{ vars.VITE_REPO_URL }}
+      VITE_DOCS_URL: ${{ vars.VITE_DOCS_URL }}
     steps:
       - uses: actions/checkout@v7
         with:
