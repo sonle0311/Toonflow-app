@@ -1,5 +1,6 @@
 <template>
   <div class="providerList">
+    <oauthProviders />
     <div class="itemList">
       <toonflowProviderCard scope="text" :provider="customProviders.find(item => item.id.toLowerCase() === 'toonflow')" />
       <el-card v-for="item in visibleProviders" :key="item.id" class="providerItem" shadow="never">

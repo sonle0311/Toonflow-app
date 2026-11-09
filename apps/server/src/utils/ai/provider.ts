@@ -36,6 +36,8 @@ export const reasoningEffortsSchema = z.union([
 export const providerSchema = z.object({
   apiUrl: z.url({ protocol: /^https?$/ }),
   apiKey: z.string(),
+  /** Có giá trị khi provider đăng nhập qua OAuth của pi thay vì API key. */
+  oauthProviderId: z.string().min(1).max(96).optional(),
   headers: providerHeadersSchema.optional(),
   protocol: z.enum(["openai-completions", "openai-responses", "anthropic-messages"]),
   maxRequestImageBytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),

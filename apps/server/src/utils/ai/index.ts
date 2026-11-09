@@ -13,6 +13,7 @@ import { readDocument } from "@/utils/documents";
 import { getConfiguredProviders, getModelLimits, getModelReasoning, getProviderBaseUrl, providerSchema } from "@/utils/ai/provider";
 import { modelGateway, requireDirectModelAccess } from "@/utils/multiTenant/gateway";
 import { createBillingUsageTracker } from "@/utils/ai/billingUsage";
+import { t } from "@/lib/i18n";
 
 export { fetchProviderModels } from "@/utils/ai/models";
 export { accountProviderSchema, getAccountProvider, getAccountToken, getConfiguredProviders, getModelLimits, getModelReasoning, providerSchema, reasoningEffortsSchema } from "@/utils/ai/provider";
@@ -150,6 +151,8 @@ export function streamAi(
   references: Awaited<ReturnType<typeof readAiReferences>> = [],
 ) {
   const { provider, model: configuredModel, baseUrl } = configured;
+  // ACT: 登录供应商的凭据由 pi 认证存储管理，节点直连通道暂无凭据注入能力。
+  if (provider.oauthProviderId) throw Object.assign(new Error(t`登录供应商暂不支持在节点内直接调用，请在对话中使用`), { status: 400 });
   const model: Model<typeof provider.protocol> = {
     id: configuredModel.id, name: configuredModel.label, provider: "toonflow", api: provider.protocol, baseUrl,
     reasoning: false, input: ["text", "image"],

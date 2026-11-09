@@ -37,6 +37,7 @@ import * as mentionFiles from "@/agent/mentionFiles";
 import * as network from "@/utils/network";
 import * as channel from "@/utils/channel";
 import * as multiTenant from "@/utils/multiTenant";
+import * as oauth from "@/utils/ai/oauth";
 
 export default {
   assets,
@@ -80,4 +81,5 @@ export default {
   network,
   channel,
   multiTenant,
+  oauth,
 };

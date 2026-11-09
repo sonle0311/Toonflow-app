@@ -109,7 +109,7 @@ export const privacySettings = computed(() => {
 });
 
 export type CustomProviderModel = { id: string; label: string; contextWindow?: number; maxOutputTokens?: number; reasoningEfforts?: ReasoningEfforts };
-export type CustomProvider = { id: string; label: string; icon?: string; version?: string; apiUrl: string; apiKey: string; headers?: Record<string, string>; protocol: string; models: CustomProviderModel[] };
+export type CustomProvider = { id: string; label: string; icon?: string; version?: string; apiUrl: string; apiKey: string; headers?: Record<string, string>; protocol: string; oauthProviderId?: string; models: CustomProviderModel[] };
 export const toonflowAccountToken = computed(() => {
   const account = settings.value.toonflowAccount as { token?: unknown } | null | undefined;
   return typeof account?.token === "string" ? account.token.trim() : "";

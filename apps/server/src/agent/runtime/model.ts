@@ -2,6 +2,7 @@ import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { ThinkingLevel } from "@/lib/modelReasoning";
 import { getConfiguredModel } from "@/utils/ai";
+import { oauthAuthPath } from "@/utils/ai/oauth";
 import { currentIdentity } from "@/utils/multiTenant/context";
 import { t } from "@/lib/i18n";
 
@@ -26,6 +27,17 @@ export function getRuntimeModelConfiguration(runtime: ModelRuntime) {
 export async function createAgentModel(providerId: string, modelId: string, thinkingLevel?: ThinkingLevel) {
   const configured = await getAgentModelConfiguration(providerId, modelId, thinkingLevel);
   const { provider, model, baseUrl } = configured;
+  if (provider.oauthProviderId) {
+    // ACT: OAuth 供应商由 pi 的认证存储提供凭据，模型目录也来自 pi 内置 provider。
+    const oauthRuntime = await ModelRuntime.create({ authPath: oauthAuthPath(), modelsPath: null, refreshOnCreate: false });
+    if (!oauthRuntime.hasConfiguredAuth(provider.oauthProviderId)) {
+      throw Object.assign(new Error(t`请先在设置中登录该供应商`), { status: 401 });
+    }
+    const oauthModel = oauthRuntime.getModel(provider.oauthProviderId, model.id);
+    if (!oauthModel) throw Object.assign(new Error(t`该供应商中没有模型 ${model.id}`), { status: 400 });
+    runtimeConfigurations.set(oauthRuntime, configured);
+    return { ...configured, runtime: oauthRuntime, runtimeModel: oauthModel };
+  }
   const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, refreshOnCreate: false });
   runtime.registerProvider(providerId, {
     api: provider.protocol,
