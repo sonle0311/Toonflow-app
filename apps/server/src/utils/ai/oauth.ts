@@ -55,22 +55,29 @@ async function createAuthRuntime() {
 
 export async function listOAuthProviders(): Promise<OAuthProvider[]> {
   const runtime = await createAuthRuntime();
-  return runtime.getProviders()
-    .filter(provider => provider.auth.oauth)
-    .map(provider => {
-      const oauth = provider.auth.oauth!;
-      return {
-        id: provider.id,
-        name: oauth.name,
-        isSubscription: Boolean(oauth.isSubscription),
-        loginLabel: oauth.loginLabel ?? null,
-        loggedIn: runtime.hasConfiguredAuth(provider.id),
-        models: provider.getModels().map(model => ({
-          id: model.id, label: model.name, contextWindow: model.contextWindow, maxOutputTokens: model.maxTokens,
-          reasoning: Boolean(model.reasoning),
-        })),
-      };
-    });
+  const providers = runtime.getProviders().filter(provider => provider.auth.oauth);
+  // ACT: hasConfiguredAuth 只反映创建时的快照；checkAuth 会读取凭据文件，登录后立即可见。
+  const configured = await Promise.all(providers.map(async provider => {
+    try {
+      return Boolean(await runtime.checkAuth(provider.id));
+    } catch {
+      return false;
+    }
+  }));
+  return providers.map((provider, index) => {
+    const oauth = provider.auth.oauth!;
+    return {
+      id: provider.id,
+      name: oauth.name,
+      isSubscription: Boolean(oauth.isSubscription),
+      loginLabel: oauth.loginLabel ?? null,
+      loggedIn: configured[index],
+      models: provider.getModels().map(model => ({
+        id: model.id, label: model.name, contextWindow: model.contextWindow, maxOutputTokens: model.maxTokens,
+        reasoning: Boolean(model.reasoning),
+      })),
+    };
+  });
 }
 
 export async function logoutOAuthProvider(providerId: string) {

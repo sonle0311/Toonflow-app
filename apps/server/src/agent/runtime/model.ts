@@ -30,7 +30,7 @@ export async function createAgentModel(providerId: string, modelId: string, thin
   if (provider.oauthProviderId) {
     // ACT: OAuth 供应商由 pi 的认证存储提供凭据，模型目录也来自 pi 内置 provider。
     const oauthRuntime = await ModelRuntime.create({ authPath: oauthAuthPath(), modelsPath: null, refreshOnCreate: false });
-    if (!oauthRuntime.hasConfiguredAuth(provider.oauthProviderId)) {
+    if (!(await oauthRuntime.checkAuth(provider.oauthProviderId).catch(() => undefined))) {
       throw Object.assign(new Error(t`请先在设置中登录该供应商`), { status: 401 });
     }
     const oauthModel = oauthRuntime.getModel(provider.oauthProviderId, model.id);
