@@ -46,6 +46,9 @@ async function initialize() {
   if (gate !== "ready") {
     mountMarketGate(gate);
     isMounted = true;
+    // ACT: phải báo desktop ready, nếu không splash native sẽ phủ mãi và không thấy màn hình đăng nhập.
+    await nextTick();
+    await notifyDesktopReady();
     return;
   }
   const { session, app: tenantApp } = await initializeMultiTenant();
