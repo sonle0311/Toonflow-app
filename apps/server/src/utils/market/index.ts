@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node
 import { hostname } from "node:os";
 import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { importJWK, jwtVerify, type JWK } from "jose";
 import conf from "@/utils/conf";
 
 export type MarketSession = {
@@ -34,6 +35,7 @@ const OFFLINE_GRACE_MS = 7 * 86400000;
 const sessionFile = () => resolve(dirname(conf.path), "market-session.json");
 const deviceFile = () => resolve(dirname(conf.path), "device.json");
 const entitlementCacheFile = () => resolve(dirname(conf.path), "market-entitlement.json");
+const jwksFile = () => resolve(dirname(conf.path), "market-jwks.json");
 
 /** Mã thiết bị ổn định theo máy cài đặt, dùng cho giới hạn số thiết bị. */
 export function deviceInfo(): { id: string; name: string } {
@@ -165,6 +167,7 @@ export async function getEntitlements(force = false): Promise<MarketEntitlements
     cache = { at: Date.now(), value: data };
     offlineUntil = 0;
     writeEntitlementCache(data);
+    void refreshJwks();
     return data;
   } catch (error) {
     const status = (error as { status?: number }).status;
@@ -175,10 +178,24 @@ export async function getEntitlements(force = false): Promise<MarketEntitlements
     // ACT: market không truy cập được → dùng entitlement đã cache trong 7 ngày.
     if (status === undefined || status === 503) {
       const cached = readEntitlementCache();
-      if (cached?.value && Date.now() - cached.at < OFFLINE_GRACE_MS && cached.value.expiresAt > Date.now()) {
-        cache = cached;
-        offlineUntil = cached.at + OFFLINE_GRACE_MS;
-        return cached.value;
+      if (cached?.value && Date.now() - cached.at < OFFLINE_GRACE_MS) {
+        const claims = await verifyLicenseOffline(cached.value.license);
+        if (claims?.exp && claims.exp * 1000 > Date.now()) {
+          // ACT: dùng claim đã ký thay vì nội dung cache, tránh sửa tay kéo dài hạn.
+          const verified: MarketEntitlements = {
+            plan: claims.plan ?? cached.value.plan,
+            planName: cached.value.planName,
+            expiresAt: claims.exp * 1000,
+            plugins: claims.plugins ?? cached.value.plugins,
+            addons: claims.addons ?? cached.value.addons ?? [],
+            maxDevices: claims.maxDevices ?? cached.value.maxDevices,
+            license: cached.value.license,
+          };
+          cache = { at: cached.at, value: verified };
+          offlineUntil = cached.at + OFFLINE_GRACE_MS;
+          return verified;
+        }
+        throw Object.assign(new Error("Không xác minh được license offline, cần kết nối market"), { status: 503, codeName: "MARKET_OFFLINE_INVALID" });
       }
     }
     throw error;
@@ -270,4 +287,34 @@ export function startMarketHeartbeat() {
   const timer = setInterval(() => { void getEntitlements(true).catch(() => {}); }, 6 * 3600_000);
   timer.unref?.();
   return () => clearInterval(timer);
+}
+
+type LicenseClaims = { sub?: string; plan?: string; plugins?: string[]; addons?: string[]; maxDevices?: number; exp?: number };
+
+/** ACT: license JWT là nguồn sự thật khi offline; cache JSON có thể bị sửa tay. */
+async function verifyLicenseOffline(license: string): Promise<LicenseClaims | undefined> {
+  try {
+    if (!existsSync(jwksFile())) return undefined;
+    const jwks = JSON.parse(readFileSync(jwksFile(), "utf8")) as { keys?: (JWK & { kid?: string })[] };
+    const key = jwks.keys?.[0];
+    if (!key) return undefined;
+    const publicKey = await importJWK(key, "ES256");
+    const { payload } = await jwtVerify(license, publicKey, { issuer: "toonflow-market" });
+    return payload as LicenseClaims;
+  } catch {
+    return undefined;
+  }
+}
+
+async function refreshJwks() {
+  try {
+    const response = await fetch(`${marketBaseUrl()}/license/public-key`);
+    if (!response.ok) return;
+    const body = await response.json() as { data?: unknown };
+    if (!body?.data) return;
+    mkdirSync(dirname(jwksFile()), { recursive: true });
+    writeFileSync(jwksFile(), JSON.stringify(body.data), { mode: 0o600 });
+  } catch {
+    // Không lấy được JWKS thì giữ bản cũ; offline sẽ báo lỗi nếu chưa từng có.
+  }
 }
