@@ -19,7 +19,7 @@ import showWindowsNotification from "./windowsNotification";
 import config from "../../../electrobun.config";
 
 // ACT: tiêu đề cửa sổ theo thương hiệu build (APP_NAME), mặc định "toonflow".
-const appDisplayName = config.app.name;
+const appDisplayName = process.env.APP_NAME?.trim() || config.app.name?.trim() || "SL Studio";
 const execFileAsync = promisify(execFile);
 const pendingInstalls: PluginInstallRequest[] = [];
 let deliverInstall: ((request: PluginInstallRequest) => void) | undefined;

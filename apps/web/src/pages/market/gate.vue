@@ -23,6 +23,13 @@
             <input v-model="password" type="password" :autocomplete="isRegister ? 'new-password' : 'current-password'" placeholder="Tối thiểu 8 ký tự" minlength="8" required>
           </label>
           <p v-if="error" class="error">{{ error }}</p>
+          <div v-if="devices.length" class="devices">
+            <p class="hint">Thiết bị đang dùng tài khoản này:</p>
+            <div v-for="device in devices" :key="device.id" class="deviceItem">
+              <span>{{ device.name || "Thiết bị" }}<em v-if="device.lastSeenAt"> · {{ formatDate(device.lastSeenAt) }}</em></span>
+              <button class="link" type="button" :disabled="!!removing" @click="removeOldDevice(device.id)">{{ removing === device.id ? "Đang gỡ…" : "Gỡ" }}</button>
+            </div>
+          </div>
           <button type="submit" :disabled="busy">{{ busy ? "Đang xử lý…" : isRegister ? "Đăng ký và dùng thử 3 ngày" : "Đăng nhập" }}</button>
         </form>
         <button class="link" type="button" @click="toggleMode">{{ isRegister ? "Đã có tài khoản? Đăng nhập" : "Chưa có tài khoản? Đăng ký" }}</button>
@@ -61,6 +68,7 @@ import { appName } from "@/lib/branding";
 type MarketStatus = { loggedIn: boolean; email: string; plan: string; planName: string; expiresAt: number };
 type Plan = { code: string; name: string; price: number; periodDays: number };
 type Order = { code: string; amount: number; qrUrl: string | null; expiresIn: number };
+type Device = { id: string; name?: string; lastSeenAt?: number };
 
 const props = defineProps<{ mode: "login" | "paywall" }>();
 
@@ -74,15 +82,23 @@ const status = ref<MarketStatus | null>(null);
 const plans = ref<Plan[]>([]);
 const selected = ref("");
 const order = ref<Order | null>(null);
+const devices = ref<Device[]>([]);
+const removing = ref("");
 let poller: ReturnType<typeof setInterval> | undefined;
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value);
 }
 
+function formatDate(value: number) {
+  return new Date(value).toLocaleDateString("vi-VN");
+}
+
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || `Lỗi ${response.status}`);
+  if (!response.ok) {
+    throw Object.assign(new Error(body?.message || `Lỗi ${response.status}`), { code: body?.code, data: body?.data });
+  }
   return body;
 }
 
@@ -104,8 +120,27 @@ async function submitAuth() {
     window.location.reload();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : "Không đăng nhập được";
+    const list = (cause as { data?: { devices?: Device[] } }).data?.devices;
+    devices.value = Array.isArray(list) ? list : [];
   } finally {
     busy.value = false;
+  }
+}
+
+async function removeOldDevice(id: string) {
+  if (removing.value) return;
+  removing.value = id;
+  try {
+    await readJson(await fetch("/api/market/devices/remove", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }),
+    }));
+    devices.value = devices.value.filter(device => device.id !== id);
+    error.value = "";
+    await submitAuth();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "Không gỡ được thiết bị";
+  } finally {
+    removing.value = "";
   }
 }
 
@@ -176,6 +211,10 @@ button { border: none; border-radius: 8px; padding: 11px 14px; font-size: 14px; 
 button:disabled { opacity: 0.55; cursor: not-allowed; }
 button.link { background: transparent; color: #8ab4ff; font-size: 13px; padding: 4px; }
 .error { color: #ff7a7a; font-size: 13px; margin: 0; }
+
+.devices { display: flex; flex-direction: column; gap: 6px; border: 1px solid #333; border-radius: 8px; padding: 10px; }
+.deviceItem { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.deviceItem em { color: #9a9a9a; font-style: normal; }
 .plans { display: flex; flex-direction: column; gap: 10px; }
 .plan { display: flex; justify-content: space-between; background: #151515; border: 1px solid #2f2f2f; color: #ddd; }
 .plan.selected { border-color: #409eff; background: #16202b; }

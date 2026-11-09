@@ -114,7 +114,7 @@ async function marketFetch<T>(path: string, init: RequestInit & { token?: string
   const body = await response.json().catch(() => ({})) as { code?: number; codeName?: string; message?: string; data?: T };
   if (!response.ok) {
     throw Object.assign(new Error(body?.message || `Market trả lỗi ${response.status}`), {
-      status: response.status, code: body?.code, codeName: body?.codeName,
+      status: response.status, code: body?.code, codeName: body?.codeName, data: body?.data,
     });
   }
   return body.data as T;
@@ -248,6 +248,15 @@ export async function getOrder(code: string) {
 export function isPluginAllowed(entitlements: MarketEntitlements | null, name: string) {
   if (!entitlements) return false;
   return entitlements.plugins.includes("*") || entitlements.plugins.includes(name) || entitlements.addons.includes(name);
+}
+
+/** Gỡ thiết bị của chính tài khoản để đăng nhập máy khác. */
+export async function removeDevice(deviceId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(deviceId)) throw Object.assign(new Error("Mã thiết bị không hợp lệ"), { status: 400 });
+  const session = readSession();
+  if (!session) throw Object.assign(new Error("Chưa đăng nhập"), { status: 401 });
+  const token = await ensureAccessToken(session);
+  await marketFetch(`/license/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE", token });
 }
 
 export type MarketAddon = { slug: string; name: string; type: string; price: number; description: string; owned: boolean };

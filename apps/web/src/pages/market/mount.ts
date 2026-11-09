@@ -7,6 +7,8 @@ export type MarketGateMode = "login" | "paywall" | "ready";
 export async function marketGateMode(): Promise<MarketGateMode> {
   try {
     const response = await fetch("/api/market/status", { headers: { accept: "application/json" } });
+    // ACT: 409 = đủ thiết bị; đưa về màn hình đăng nhập để người dùng gỡ máy cũ.
+    if (response.status === 409) return "login";
     if (!response.ok) return "ready";
     const body = await response.json();
     const status = body?.data;
