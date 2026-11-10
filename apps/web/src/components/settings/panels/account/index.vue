@@ -158,7 +158,7 @@ import { IconChartBar, IconCreditCard, IconExternalLink, IconGift, IconLogout, I
 import logoUrl from "@toonflow/assets/toonflowLogo.svg";
 import type { Captcha, Login, PreviewData, UsageStatistics } from "@toonflow/server/channel";
 import http from "@/lib/http";
-import { refreshToonflowProvider, saveSettings, settings, toonflowProviderError, toonflowProviderLoading } from "@/stores/settings";
+import { saveSettings, settings } from "@/stores/settings";
 import smsCodeButton from "./smsCodeButton.vue";
 import forgotPasswordDialog from "./forgotPasswordDialog.vue";
 import accountChart from "./accountChart.vue";
@@ -198,10 +198,10 @@ const previewData = ref<PreviewData>();
 const usageStatistics = ref<UsageStatistics>();
 const previewLoading = ref(false);
 const usageLoading = ref(false);
-const overviewLoading = computed(() => previewLoading.value || usageLoading.value || toonflowProviderLoading.value || modelsLoading.value || recordsLoading.value || walletLoading.value || subAccountsLoading.value);
+const overviewLoading = computed(() => previewLoading.value || usageLoading.value || modelsLoading.value || recordsLoading.value || walletLoading.value || subAccountsLoading.value);
 const previewError = ref("");
 const usageError = ref("");
-const overviewError = computed(() => [...new Set([previewError.value, usageError.value, toonflowProviderError.value].filter(Boolean))].join("；"));
+const overviewError = computed(() => [...new Set([previewError.value, usageError.value].filter(Boolean))].join("；"));
 const trendData = computed(() => {
   const daily = [...(previewData.value?.daily ?? [])].sort((left, right) => left.date.localeCompare(right.date));
   return { dates: daily.map(item => item.date), series: [{ name: translate("消费金额"), data: daily.map(item => item.total) }] };
@@ -293,7 +293,6 @@ function refreshOverview() {
 
 function refreshAccount() {
   refreshOverview();
-  void refreshToonflowProvider();
   if (accountTab.value === "models") void catalog.value?.refresh();
   if (accountTab.value === "taskRecords") void records.value?.refresh();
   if (accountTab.value === "wallet") void walletPanel.value?.refresh();

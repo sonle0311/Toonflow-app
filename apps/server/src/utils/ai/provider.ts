@@ -50,12 +50,14 @@ export const providerSchema = z.object({
   })),
 });
 
+// ACT: provider tài khoản Toonflow chỉ còn cho luồng media/channel cũ, không được chèn vào danh sách text.
 export const accountProviderSchema = providerSchema.extend({
   id: z.enum(["Toonflow", "toonflow"]), label: z.string().min(1), apiKey: z.literal(""),
   token: z.string().trim().min(1).max(16384).optional(),
   icon: z.string().optional(), version: z.string().optional(),
 });
 
+/** Token tài khoản Toonflow cũ; chỉ còn dùng cho các tính năng kênh đang ẩn. */
 export function getAccountToken() {
   const account = conf.get("settings", {}).toonflowAccount as { token?: unknown } | null | undefined;
   return typeof account?.token === "string" ? account.token.trim() : "";
@@ -69,8 +71,8 @@ export function getAccountProvider() {
 
 export function getConfiguredProviders() {
   const providers = conf.get("settings", {}).customProviders;
-  const account = getAccountProvider();
-  return [...(account ? [account] : []), ...(Array.isArray(providers) ? providers.filter(item => typeof item?.id !== "string" || item.id.toLowerCase() !== "toonflow") : [])];
+  // ACT: bản độc lập không dùng provider Toonflow; bỏ mọi cấu hình còn sót từ bản cũ.
+  return Array.isArray(providers) ? providers.filter(item => typeof item?.id !== "string" || item.id.toLowerCase() !== "toonflow") : [];
 }
 
 const builtinModels: Model<KnownApi>[] = getBuiltinProviders().flatMap(provider => getBuiltinModels(provider));

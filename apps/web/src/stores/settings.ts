@@ -116,48 +116,10 @@ export const toonflowAccountToken = computed(() => {
 });
 export const customProviders = computed<CustomProvider[]>(() => {
   const providers = Array.isArray(settings.value.customProviders) ? [...settings.value.customProviders] : [];
-  const accountProvider = settings.value.toonflowProvider as CustomProvider | null | undefined;
-  if (toonflowAccountToken.value && (accountProvider?.id === "Toonflow" || accountProvider?.id === "toonflow")) providers.unshift(accountProvider);
   return providers.filter((item): item is CustomProvider => !!item && typeof item.id === "string" && typeof item.label === "string" && Array.isArray(item.models)
     && item.models.every((model: CustomProviderModel) => !!model && typeof model.id === "string" && typeof model.label === "string"));
 });
 
-export const toonflowProviderLoading = ref(false);
-export const toonflowProviderError = ref("");
-let providerRequest: AbortController | undefined;
-
-export async function refreshToonflowProvider() {
-  providerRequest?.abort();
-  toonflowProviderError.value = "";
-  toonflowProviderLoading.value = false;
-  const token = toonflowAccountToken.value;
-  if (multiTenantEnabled.value || !token) { providerRequest = undefined; return; }
-  const request = new AbortController();
-  providerRequest = request;
-  toonflowProviderLoading.value = true;
-  try {
-    const sources = await http<ProviderSources>({
-      method: "GET", url: "/api/channel/provider/getSource", signal: request.signal,
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    request.signal.throwIfAborted();
-    const { data } = await axios.post<{ code: number; data: { provider: CustomProvider }; message?: string }>(
-      "/api/providers/account/install", { sources, token },
-      { signal: request.signal, headers: { "x-toonflow-workspace": "1", Authorization: `Bearer ${token}` }, timeout: 45000 },
-    );
-    if (data.code !== 200 || data.data?.provider?.id !== "Toonflow") throw new Error(data.message || "安装账号供应商失败");
-    await saveSettings(() => request.signal.aborted || multiTenantEnabled.value || toonflowAccountToken.value !== token
-      ? undefined : { toonflowProvider: data.data.provider }, request.signal);
-  } catch (error) {
-    if (!request.signal.aborted && !multiTenantEnabled.value && toonflowAccountToken.value === token) {
-      toonflowProviderError.value = axios.isAxiosError<{ message?: string }>(error)
-        ? error.response?.data?.message || "安装账号供应商失败，请刷新重试"
-        : error instanceof Error ? error.message : "安装账号供应商失败，请刷新重试";
-    }
-  } finally {
-    if (providerRequest === request) { providerRequest = undefined; toonflowProviderLoading.value = false; }
-  }
-}
 
 type ResolvedAiModel = { providerId: string; providerLabel: string; modelId: string; routeId?: string; label: string; contextWindow: number; reasoningLevels: ThinkingLevel[] };
 const availableModels = ref<ResolvedAiModel[]>([]);
@@ -191,7 +153,6 @@ export async function loadSettings() {
   // 等初始化引发的监听执行完，再允许自动保存。
   await nextTick();
   settingsReady = true;
-  void refreshToonflowProvider();
 }
 
 export function saveSettings(update?: (current: Record<string, unknown>) => Record<string, unknown> | undefined, signal?: AbortSignal) {
@@ -260,5 +221,4 @@ watch(settings, () => {
 }, { deep: true, flush: "sync" });
 
 watch([() => settings.value.toonflowAccount, multiTenantEnabled], () => {
-  if (settingsReady) void refreshToonflowProvider();
 }, { flush: "sync" });

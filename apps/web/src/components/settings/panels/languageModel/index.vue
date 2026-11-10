@@ -2,7 +2,6 @@
   <div class="providerList">
     <oauthProviders />
     <div class="itemList">
-      <toonflowProviderCard scope="text" :provider="customProviders.find(item => item.id.toLowerCase() === 'toonflow')" />
       <el-card v-for="item in visibleProviders" :key="item.id" class="providerItem" shadow="never">
         <div class="providerHeader">
           <div v-if="item.icon" class="providerMark" aria-hidden="true">
@@ -44,7 +43,6 @@ import { ElMessage } from "element-plus";
 import { customProviders, saveSettings, type CustomProvider } from "@/stores/settings";
 import { IconPlus, IconSettings, IconEdit, IconTrash } from "@tabler/icons-vue";
 import { languageProviders } from "@toonflow/providers";
-import toonflowProviderCard from "../../toonflowProviderCard.vue";
 
 defineProps<{ visible?: boolean }>();
 const addProviderDialog = shallowRef<Component>();
