@@ -83,7 +83,7 @@ const allSettingsPanels = [
   // ACT: cửa hàng add-on của bản độc lập, luôn hiển thị vì đi qua market service của mình.
   {
     id: "store",
-    label: "Cửa hàng",
+    label: "商店",
     icon: IconBuildingStore,
     groupLabel: "市场",
     component: defineAsyncComponent(() => import("./panels/store/index.vue")),

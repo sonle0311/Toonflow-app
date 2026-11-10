@@ -4065,5 +4065,6 @@
   "画布1": "Canvas 1",
   "画布{0}": "Canvas {0}",
   "尚未配置文本模型。请先在设置中添加供应商或登录账号。": "No text model configured. Add a provider or sign in from Settings.",
-  "前往设置": "Open settings"
+  "前往设置": "Open settings",
+  "商店": "Store"
 }

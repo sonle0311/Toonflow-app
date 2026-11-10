@@ -2,34 +2,34 @@
   <div class="storePanel">
     <div class="storeHeader">
       <div>
-        <el-text tag="strong">Cửa hàng add-on</el-text>
-        <el-text size="small" type="info">Mua một lần, dùng cho tài khoản hiện tại. Cần subscription còn hạn.</el-text>
+        <el-text tag="strong">{{ text("storeTitle") }}</el-text>
+        <el-text size="small" type="info">{{ text("storeHint") }}</el-text>
       </div>
-      <el-button size="small" :icon="IconRefresh" :loading="loading" @click="load">Làm mới</el-button>
+      <el-button size="small" :icon="IconRefresh" :loading="loading" @click="load">{{ text("refresh") }}</el-button>
     </div>
 
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
-    <el-text v-else-if="!loading && !addons.length" size="small" type="info">Hiện chưa có add-on nào.</el-text>
+    <el-text v-else-if="!loading && !addons.length" size="small" type="info">{{ text("storeEmpty") }}</el-text>
 
     <div v-for="addon in addons" :key="addon.slug" class="addonItem">
       <div class="addonInfo">
         <el-text tag="strong">{{ addon.name }}</el-text>
         <el-tag size="small" type="info" effect="plain">{{ addon.type }}</el-tag>
-        <el-text size="small" type="info">{{ formatPrice(addon.price) }}đ</el-text>
+        <el-text size="small" type="info">{{ formatMoney(addon.price) }}</el-text>
         <el-text size="small" class="addonDescription">{{ addon.description }}</el-text>
       </div>
       <div class="addonActions">
-        <el-tag v-if="addon.owned" size="small" type="success" effect="plain">Đã sở hữu</el-tag>
-        <el-button v-if="addon.owned" size="small" type="primary" :loading="installing === addon.slug" @click="install(addon)">Cài đặt</el-button>
-        <el-button v-else size="small" type="primary" :loading="ordering === addon.slug" @click="buy(addon)">Mua</el-button>
+        <el-tag v-if="addon.owned" size="small" type="success" effect="plain">{{ text("owned") }}</el-tag>
+        <el-button v-if="addon.owned" size="small" type="primary" :loading="installing === addon.slug" @click="install(addon)">{{ text("install") }}</el-button>
+        <el-button v-else size="small" type="primary" :loading="ordering === addon.slug" @click="buy(addon)">{{ text("buy") }}</el-button>
       </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" title="Thanh toán add-on" width="min(520px, 92vw)" align-center append-to-body :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="text('payTitle')" width="min(520px, 92vw)" align-center append-to-body :close-on-click-modal="false">
       <div v-if="order" class="orderDialog">
-        <el-text>Chuyển khoản với nội dung <strong>{{ order.code }}</strong> — số tiền <strong>{{ formatPrice(order.amount) }}đ</strong>.</el-text>
-        <img v-if="order.qrUrl" :src="order.qrUrl" alt="VietQR" class="qrImage">
-        <el-text size="small" type="info">Trang tự cập nhật khi nhận được tiền.</el-text>
+        <el-text>{{ text("transferHint", [order.code, formatMoney(order.amount)]) }}</el-text>
+        <img v-if="order.qrUrl" :src="order.qrUrl" :alt="text('qrAlt')" class="qrImage">
+        <el-text size="small" type="info">{{ text("orderExpire", [String(Math.round(order.expiresIn / 60))]) }}</el-text>
       </div>
     </el-dialog>
   </div>
@@ -40,10 +40,12 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import axios from "axios";
 import { ElMessage } from "element-plus";
 import { IconRefresh } from "@tabler/icons-vue";
+import { formatMoney, marketText } from "@/lib/marketI18n";
 
 type Addon = { slug: string; name: string; type: string; price: number; description: string; owned: boolean };
-type Order = { code: string; amount: number; qrUrl: string | null };
+type Order = { code: string; amount: number; qrUrl: string | null; expiresIn: number };
 
+const text = marketText;
 const addons = ref<Addon[]>([]);
 const loading = ref(false);
 const error = ref("");
@@ -53,12 +55,8 @@ const dialogVisible = ref(false);
 const order = ref<Order | null>(null);
 let poller: ReturnType<typeof setInterval> | undefined;
 
-function formatPrice(value: number) {
-  return new Intl.NumberFormat("vi-VN").format(value);
-}
-
-function errorText(cause: unknown, fallback: string) {
-  return axios.isAxiosError(cause) ? String(cause.response?.data?.message ?? cause.message) : fallback;
+function errorText(cause: unknown, fallbackKey: "loadStoreError" | "orderCreateError" | "installError") {
+  return axios.isAxiosError(cause) ? String(cause.response?.data?.message ?? cause.message) : text(fallbackKey);
 }
 
 async function load() {
@@ -68,7 +66,7 @@ async function load() {
     const { data } = await axios.get<{ code: number; data: Addon[] }>("/api/market/addons");
     addons.value = data.data ?? [];
   } catch (cause) {
-    error.value = errorText(cause, "Không tải được danh sách add-on");
+    error.value = errorText(cause, "loadStoreError");
   } finally {
     loading.value = false;
   }
@@ -84,7 +82,7 @@ async function buy(addon: Addon) {
     dialogVisible.value = true;
     startPolling(data.data.code);
   } catch (cause) {
-    error.value = errorText(cause, "Không tạo được đơn mua add-on");
+    error.value = errorText(cause, "orderCreateError");
   } finally {
     ordering.value = "";
   }
@@ -99,7 +97,7 @@ function startPolling(code: string) {
         if (poller) clearInterval(poller);
         dialogVisible.value = false;
         await load();
-        ElMessage.success("Đã mua add-on, bấm Cài đặt để dùng");
+        ElMessage.success(text("purchased"));
       }
     } catch {
       // Bỏ qua lỗi mạng tạm thời.
@@ -111,9 +109,9 @@ async function install(addon: Addon) {
   installing.value = addon.slug;
   try {
     await axios.post("/api/market/addons/install", { slug: addon.slug });
-    ElMessage.success("Đã cài add-on, tải lại trang để thấy node mới");
+    ElMessage.success(text("installOk"));
   } catch (cause) {
-    ElMessage.error(errorText(cause, "Cài add-on thất bại"));
+    ElMessage.error(errorText(cause, "installError"));
   } finally {
     installing.value = "";
   }

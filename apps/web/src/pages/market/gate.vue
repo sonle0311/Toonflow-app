@@ -7,54 +7,54 @@
       </header>
 
       <template v-if="mode === 'login'">
-        <h1>{{ isRegister ? "Tạo tài khoản" : "Đăng nhập" }}</h1>
-        <p class="hint">Tài khoản dùng cho ứng dụng và mua gói dịch vụ.</p>
+        <h1>{{ isRegister ? text("registerTitle") : text("loginTitle") }}</h1>
+        <p class="hint">{{ text("accountHint") }}</p>
         <form @submit.prevent="submitAuth">
           <label v-if="isRegister">
-            <span>Tên hiển thị</span>
-            <input v-model="name" autocomplete="nickname" placeholder="Nguyễn Văn A" required>
+            <span>{{ text("nameLabel") }}</span>
+            <input v-model="name" autocomplete="nickname" :placeholder="text('namePlaceholder')" required>
           </label>
           <label>
-            <span>Email</span>
-            <input v-model="email" type="email" autocomplete="username" placeholder="ban@email.com" required>
+            <span>{{ text("emailLabel") }}</span>
+            <input v-model="email" type="email" autocomplete="username" :placeholder="text('emailPlaceholder')" required>
           </label>
           <label>
-            <span>Mật khẩu</span>
-            <input v-model="password" type="password" :autocomplete="isRegister ? 'new-password' : 'current-password'" placeholder="Tối thiểu 8 ký tự" minlength="8" required>
+            <span>{{ text("passwordLabel") }}</span>
+            <input v-model="password" type="password" :autocomplete="isRegister ? 'new-password' : 'current-password'" :placeholder="text('passwordPlaceholder')" minlength="8" required>
           </label>
           <p v-if="error" class="error">{{ error }}</p>
           <div v-if="devices.length" class="devices">
-            <p class="hint">Thiết bị đang dùng tài khoản này:</p>
+            <p class="hint">{{ text("deviceTitle") }}</p>
             <div v-for="device in devices" :key="device.id" class="deviceItem">
-              <span>{{ device.name || "Thiết bị" }}<em v-if="device.lastSeenAt"> · {{ formatDate(device.lastSeenAt) }}</em></span>
-              <button class="link" type="button" :disabled="!!removing" @click="removeOldDevice(device.id)">{{ removing === device.id ? "Đang gỡ…" : "Gỡ" }}</button>
+              <span>{{ device.name || text("deviceFallback") }}<em v-if="device.lastSeenAt"> · {{ formatDate(device.lastSeenAt) }}</em></span>
+              <button class="link" type="button" :disabled="!!removing" @click="removeOldDevice(device.id)">{{ removing === device.id ? text("removing") : text("remove") }}</button>
             </div>
           </div>
-          <button type="submit" :disabled="busy">{{ busy ? "Đang xử lý…" : isRegister ? "Đăng ký và dùng thử 3 ngày" : "Đăng nhập" }}</button>
+          <button type="submit" :disabled="busy">{{ busy ? text("processing") : isRegister ? text("registerButton") : text("loginButton") }}</button>
         </form>
-        <button class="link" type="button" @click="toggleMode">{{ isRegister ? "Đã có tài khoản? Đăng nhập" : "Chưa có tài khoản? Đăng ký" }}</button>
+        <button class="link" type="button" @click="toggleMode">{{ isRegister ? text("toLogin") : text("toRegister") }}</button>
       </template>
 
       <template v-else>
-        <h1>Gói của bạn đã hết hạn</h1>
-        <p class="hint">Chọn gói để tiếp tục sử dụng. Thanh toán bằng chuyển khoản VietQR.</p>
+        <h1>{{ text("expiredTitle") }}</h1>
+        <p class="hint">{{ text("expiredHint") }}</p>
 
         <div v-if="plans.length" class="plans">
           <button v-for="plan in plans" :key="plan.code" class="plan" :class="{ selected: selected === plan.code }" type="button" @click="selected = plan.code">
-            <strong>{{ plan.name }}</strong>
-            <span class="price">{{ formatPrice(plan.price) }}đ / {{ plan.periodDays }} ngày</span>
+            <strong>{{ planLabel(plan) }}</strong>
+            <span class="price">{{ text("planPeriod", [formatMoney(plan.price), String(plan.periodDays)]) }}</span>
           </button>
-          <button class="buy" type="button" :disabled="!selected || busy" @click="buy">{{ busy ? "Đang tạo đơn…" : "Tạo đơn thanh toán" }}</button>
+          <button class="buy" type="button" :disabled="!selected || busy" @click="buy">{{ busy ? text("creatingOrder") : text("buyButton") }}</button>
         </div>
 
         <div v-if="order" class="order">
-          <p>Quét mã hoặc chuyển khoản với nội dung <strong>{{ order.code }}</strong> — số tiền <strong>{{ formatPrice(order.amount) }}đ</strong>.</p>
-          <img v-if="order.qrUrl" :src="order.qrUrl" alt="VietQR" class="qr">
-          <p class="hint">Đơn hết hạn sau {{ Math.round(order.expiresIn / 60) }} phút. Trang tự cập nhật khi nhận được tiền.</p>
+          <p>{{ text("transferHint", [order.code, formatMoney(order.amount)]) }}</p>
+          <img v-if="order.qrUrl" :src="order.qrUrl" :alt="text('qrAlt')" class="qr">
+          <p class="hint">{{ text("orderExpire", [String(Math.round(order.expiresIn / 60))]) }}</p>
         </div>
 
         <p v-if="error" class="error">{{ error }}</p>
-        <button class="link" type="button" @click="logout">Đăng xuất ({{ status?.email }})</button>
+        <button class="link" type="button" @click="logout">{{ text("logout") }} ({{ status?.email }})</button>
       </template>
     </div>
   </div>
@@ -64,6 +64,7 @@
 import { onBeforeUnmount, ref } from "vue";
 import logoUrl from "@toonflow/assets/logo.svg";
 import { appName } from "@/lib/branding";
+import { formatMoney, marketText } from "@/lib/marketI18n";
 
 type MarketStatus = { loggedIn: boolean; email: string; plan: string; planName: string; expiresAt: number };
 type Plan = { code: string; name: string; price: number; periodDays: number };
@@ -86,18 +87,20 @@ const devices = ref<Device[]>([]);
 const removing = ref("");
 let poller: ReturnType<typeof setInterval> | undefined;
 
-function formatPrice(value: number) {
-  return new Intl.NumberFormat("vi-VN").format(value);
+const text = marketText;
+
+function planLabel(plan: Plan) {
+  return plan.code === "trial" ? marketText("planTrial") : plan.name;
 }
 
 function formatDate(value: number) {
-  return new Date(value).toLocaleDateString("vi-VN");
+  return new Date(value).toLocaleDateString(String(navigator.language || "vi"));
 }
 
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw Object.assign(new Error(body?.message || `Lỗi ${response.status}`), { code: body?.code, data: body?.data });
+    throw Object.assign(new Error(body?.message || `Error ${response.status}`), { code: body?.code, data: body?.data });
   }
   return body;
 }
@@ -119,7 +122,7 @@ async function submitAuth() {
     await readJson(await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }));
     window.location.reload();
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "Không đăng nhập được";
+    error.value = cause instanceof Error ? cause.message : text("genericError");
     const list = (cause as { data?: { devices?: Device[] } }).data?.devices;
     devices.value = Array.isArray(list) ? list : [];
   } finally {
@@ -138,7 +141,7 @@ async function removeOldDevice(id: string) {
     error.value = "";
     await submitAuth();
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "Không gỡ được thiết bị";
+    error.value = cause instanceof Error ? cause.message : text("genericError");
   } finally {
     removing.value = "";
   }
@@ -152,7 +155,7 @@ async function loadPaywall() {
     plans.value = plansBody.data ?? [];
     selected.value = plans.value.find(plan => plan.code === status.value?.plan)?.code ?? plans.value[0]?.code ?? "";
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "Không tải được gói";
+    error.value = cause instanceof Error ? cause.message : text("genericError");
   }
 }
 
@@ -167,7 +170,7 @@ async function buy() {
     order.value = body.data;
     startPolling(body.data.code);
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "Không tạo được đơn";
+    error.value = cause instanceof Error ? cause.message : text("genericError");
   } finally {
     busy.value = false;
   }
@@ -211,7 +214,6 @@ button { border: none; border-radius: 8px; padding: 11px 14px; font-size: 14px; 
 button:disabled { opacity: 0.55; cursor: not-allowed; }
 button.link { background: transparent; color: #8ab4ff; font-size: 13px; padding: 4px; }
 .error { color: #ff7a7a; font-size: 13px; margin: 0; }
-
 .devices { display: flex; flex-direction: column; gap: 6px; border: 1px solid #333; border-radius: 8px; padding: 10px; }
 .deviceItem { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
 .deviceItem em { color: #9a9a9a; font-style: normal; }
