@@ -18,7 +18,7 @@ export default Router().get("/", async (req, res) => {
         return { name, id: name, displayName: name, extensions: [], resourceKind: "file", version: "", readme: "", author: "", github: "", configRules: [], installedAt: u.conf.get("pluginInstalledAt", {})[`ext:${name}`] ?? 0,
           loadError: translateMessage(error instanceof Error ? error.message : "文件扩展无法读取") };
       });
-      return metadata && { loadError: "", ...metadata, canManage, canConfigure: canManage, config: canManage ? u.extPlugins.getExtConfig(metadata) : {},
+      return metadata && { loadError: "", ...metadata, displayName: translateMessage(metadata.displayName), canManage, canConfigure: canManage, config: canManage ? u.extPlugins.getExtConfig(metadata) : {},
         builtin: req.app.locals.builtinPlugins.ext.has(name),
         enabled: !files.some(entry => entry.name === `${name}.disabled`), url: `/api/ext/read?name=${name}` };
     }));

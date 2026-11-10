@@ -26,6 +26,8 @@ export default router.get("/", async (req, res) => {
       return {
         loadError: "",
         ...metadata,
+        // ACT: tên node lấy từ vite.config (tiếng Trung); dịch ở host để đồng nhất ngôn ngữ UI.
+        displayName: translateMessage(metadata.displayName),
         builtin: req.app.locals.builtinPlugins.node.has(name),
         url: `/api/nodes/files?name=${name}`,
         enabled: !files.some((entry) => entry.name === `${name}.disabled`),
