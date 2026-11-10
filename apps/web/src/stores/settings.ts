@@ -155,6 +155,14 @@ export async function loadSettings() {
   settingsReady = true;
 }
 
+/** ACT: wizard thiết lập chỉ hiện khi chưa có provider và chưa hoàn tất/bỏ qua. */
+export function needsSetupWizard() {
+  const wizard = settings.value.setupWizard as { completed?: unknown } | undefined;
+  // ACT: provider placeholder do app tự cài (chưa có model/key) không tính là đã thiết lập.
+  const configured = customProviders.value.some(provider => provider.models.length > 0);
+  return wizard?.completed !== true && !configured;
+}
+
 export function saveSettings(update?: (current: Record<string, unknown>) => Record<string, unknown> | undefined, signal?: AbortSignal) {
   // ACT: 队列内读取最新配置再计算变更，确认成功后发布；仅协调当前页面的保存。
   const saving = saveQueue.then(async () => {
