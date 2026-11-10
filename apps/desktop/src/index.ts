@@ -17,10 +17,10 @@ import { parseInstallUrl } from "./protocol";
 import saveFile, { selectSaveFile } from "./saveFile";
 import createWindowsUpdater, { confirmWindowsUpdateStartup } from "./update/windowsUpdater";
 import showWindowsNotification from "./windowsNotification";
-import config from "../../../electrobun.config";
 
 // ACT: tiêu đề cửa sổ theo thương hiệu build (APP_NAME), mặc định "toonflow".
-const appDisplayName = process.env.APP_NAME?.trim() || config.app.name?.trim() || "SL Studio";
+// ACT: app build bằng env APP_NAME; bản phát hành không có env nên mặc định SL Studio.
+const appDisplayName = process.env.APP_NAME?.trim() || "SL Studio";
 const execFileAsync = promisify(execFile);
 const pendingInstalls: PluginInstallRequest[] = [];
 let deliverInstall: ((request: PluginInstallRequest) => void) | undefined;
