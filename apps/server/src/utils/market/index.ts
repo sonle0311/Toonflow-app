@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { hostname } from "node:os";
-import { dirname, resolve } from "node:path";
+import { homedir, hostname } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { importJWK, jwtVerify, type JWK } from "jose";
 import conf from "@/utils/conf";
@@ -38,21 +38,48 @@ const entitlementCacheFile = () => resolve(dirname(conf.path), "market-entitleme
 const jwksFile = () => resolve(dirname(conf.path), "market-jwks.json");
 
 /** Mã thiết bị ổn định theo máy cài đặt, dùng cho giới hạn số thiết bị. */
-export function deviceInfo(): { id: string; name: string } {
+/** ACT: mã thiết bị phải nằm ngoài thư mục cài đặt; nếu không mỗi lần cập nhật/cài lại app sẽ bị coi là máy mới. */
+function stableDeviceFile() {
+  const home = homedir();
+  const base = process.platform === "darwin"
+    ? join(home, "Library", "Application Support", "SL Studio")
+    : process.platform === "win32"
+      ? join(process.env.APPDATA ?? join(home, "AppData", "Roaming"), "SL Studio")
+      : join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "sl-studio");
+  return join(base, "device.json");
+}
+
+function readDevice(path: string): { id: string; name: string } | undefined {
   try {
-    if (existsSync(deviceFile())) {
-      const parsed = JSON.parse(readFileSync(deviceFile(), "utf8")) as { id?: unknown; name?: unknown };
-      if (typeof parsed.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.id)) {
-        return { id: parsed.id.toLowerCase(), name: typeof parsed.name === "string" ? parsed.name : hostname() };
-      }
+    if (!existsSync(path)) return undefined;
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as { id?: unknown; name?: unknown };
+    if (typeof parsed.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.id)) {
+      return { id: parsed.id.toLowerCase(), name: typeof parsed.name === "string" ? parsed.name : hostname() };
     }
   } catch {
-    // Tệp hỏng thì tạo lại mã mới.
+    // Tệp hỏng thì bỏ qua và tạo lại.
+  }
+  return undefined;
+}
+
+export function deviceInfo(): { id: string; name: string } {
+  const path = stableDeviceFile();
+  const existing = readDevice(path) ?? readDevice(deviceFile());
+  if (existing) {
+    if (!existsSync(path)) {
+      try {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, JSON.stringify(existing), { mode: 0o600 });
+      } catch {
+        // Không ghi được thì vẫn dùng mã đã có.
+      }
+    }
+    return existing;
   }
   const created = { id: randomUUID(), name: hostname() };
   try {
-    mkdirSync(dirname(deviceFile()), { recursive: true });
-    writeFileSync(deviceFile(), JSON.stringify(created), { mode: 0o600 });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(created), { mode: 0o600 });
   } catch {
     // Không ghi được thì vẫn dùng mã tạm trong phiên.
   }
