@@ -276,7 +276,7 @@ async function start() {
         // ACT: 页面未就绪或加载失败时保留原生后备，正常界面使用应用内弹窗。
         const result = await Utils.showMessageBox({
           type: "warning",
-          title: t`退出 Toonflow`,
+          title: `Thoát ${appDisplayName}`,
           message: t`退出后，正在运行的任务将被中断。确定要退出吗？`,
           buttons: [t`取消`, t`退出`],
           defaultId: 0,

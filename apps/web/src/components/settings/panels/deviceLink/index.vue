@@ -2,7 +2,7 @@
   <div v-loading="loading" class="deviceLink">
     <section v-if="isRemoteConnection" class="remoteConnection" aria-label="当前连接设备">
       <el-tag :type="mobileConnection.online === true ? mobileConnectionVersionWarning ? 'warning' : 'success' : mobileConnection.online === false ? 'danger' : 'info'">{{ mobileConnectionLabel }}</el-tag>
-      <h3>{{ mobileConnection.name || 'Toonflow' }}</h3>
+      <h3>{{ mobileConnection.name || 'SL Studio' }}</h3>
       <code>{{ mobileConnection.url }}</code>
       <p class="description">当前使用这个设备的项目与配置。断开后恢复独立运行，才可以允许其他设备连接。</p>
       <el-alert v-if="mobileConnectionVersionWarning" :title="mobileConnectionVersionWarning" type="warning" :closable="false" showIcon />
@@ -14,7 +14,7 @@
       <div class="sectionHeader">
         <div class="settingInfo">
           <h3 id="deviceLinkTitle">允许其他设备连接</h3>
-          <p class="description">其他电脑、安卓设备可使用这里的项目与配置。连接时请保持 Toonflow 运行。</p>
+          <p class="description">Máy tính khác và thiết bị Android có thể dùng dự án/cấu hình tại đây. Giữ SL Studio chạy khi kết nối.</p>
         </div>
         <el-switch :modelValue="form.enabled" :disabled="busy || !status" aria-label="允许其他设备连接" @change="value => saveConfig(value === true)" />
       </div>

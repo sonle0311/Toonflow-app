@@ -4,7 +4,7 @@
       <div class="noticeContent">
         <icon-barrier-block :size="36" aria-hidden="true" />
         <h3 id="developmentTitle">正在开发</h3>
-        <p>Toonflow 将在后续更新中推出多租户能力，敬请期待。</p>
+        <p>SL Studio hiện chưa hỗ trợ đa người thuê.</p>
       </div>
     </section>
 
@@ -23,7 +23,7 @@
           bgColor="#ffffff"
           borderless
           role="img"
-          aria-label="Toonflow 商务合作二维码" />
+          aria-label="Mã QR hợp tác SL Studio" />
       </div>
     </section>
   </div>
