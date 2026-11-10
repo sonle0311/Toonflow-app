@@ -3,7 +3,7 @@
     <div class="settings">
       <aside class="sidebar" aria-label="设置分类">
         <template v-for="item in settingsPanels" :key="item.id">
-          <h3 v-if="item.groupLabel" class="settingsGroupLabel">{{ item.groupLabel }}</h3>
+          <h3 v-if="item.showGroupLabel" class="settingsGroupLabel">{{ item.groupLabel }}</h3>
           <button
             class="settingsItem"
             type="button"
@@ -111,14 +111,24 @@ const allSettingsPanels = [
   { id: "about", label: "关于", icon: IconInfoCircle, component: defineAsyncComponent(() => import("./panels/about/index.vue")) },
 ];
 const publicAccountPanel = { ...allSettingsPanels[0]!, get label() { return translate("账号"); } };
-const settingsPanels = computed(() => allSettingsPanels.filter(item => {
-  // ACT: Kênh không cung cấp tài khoản/marketplace thì ẩn hẳn mục tương ứng.
-  if (!channelCapabilities.value.account && item.id === "account") return false;
-  if (!channelCapabilities.value.marketplace && item.id === "pluginMarket") return false;
-  if (publicWeb.value && currentUser.value?.role === "user") return ["account", "general", "about"].includes(item.id);
-  if (publicWeb.value && ["multiTenant", "deviceLink", "network", "mcp", "developer", "pluginMarket"].includes(item.id)) return false;
-  return !multiTenantEnabled.value || !["languageModel", "mediaModel", "developer"].includes(item.id);
-}).map(item => publicWeb.value && item.id === "account" ? publicAccountPanel : item));
+const settingsPanels = computed(() => {
+  const panels = allSettingsPanels.filter(item => {
+    // ACT: Kênh không cung cấp tài khoản/marketplace thì ẩn hẳn mục tương ứng.
+    if (!channelCapabilities.value.account && item.id === "account") return false;
+    if (!channelCapabilities.value.marketplace && item.id === "pluginMarket") return false;
+    if (publicWeb.value && currentUser.value?.role === "user") return ["account", "general", "about"].includes(item.id);
+    if (publicWeb.value && ["multiTenant", "deviceLink", "network", "mcp", "developer", "pluginMarket"].includes(item.id)) return false;
+    return !multiTenantEnabled.value || !["languageModel", "mediaModel", "developer"].includes(item.id);
+  }).map(item => publicWeb.value && item.id === "account" ? publicAccountPanel : item);
+  // ACT: chỉ vẽ nhãn nhóm ở mục đầu tiên của nhóm, tránh lặp "Marketplace" hai lần.
+  let previousGroup: string | undefined;
+  return panels.map(item => {
+    const group = item.groupLabel;
+    const showGroupLabel = !!group && group !== previousGroup;
+    if (group) previousGroup = group;
+    return { ...item, showGroupLabel };
+  });
+});
 const activePanel = shallowRef(settingsPanels.value[0]!);
 const visible = defineModel<boolean>({ default: false });
 

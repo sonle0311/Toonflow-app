@@ -6,6 +6,9 @@ import { locale } from "@toonflow/i18n/vue";
  */
 const dictionaries = {
   vi: {
+    benefitNodes: "Toàn bộ node",
+    benefitDevices: "{0} thiết bị",
+    benefitSupport: "Hỗ trợ qua Zalo/email",
     subHint: "Quản lý gói và gia hạn. Thanh toán bằng chuyển khoản VietQR.",
     currentPlan: "Gói hiện tại",
     expires: "Hết hạn",
@@ -61,6 +64,9 @@ const dictionaries = {
     purchased: "Đã mua add-on, bấm Cài đặt để dùng",
   },
   en: {
+    benefitNodes: "All nodes",
+    benefitDevices: "{0} device(s)",
+    benefitSupport: "Support via Zalo/email",
     subHint: "Manage your plan and renew. Pay by VietQR transfer.",
     currentPlan: "Current plan",
     expires: "Expires",
@@ -116,6 +122,9 @@ const dictionaries = {
     purchased: "Purchase complete. Click Install to use it.",
   },
   zhTw: {
+    benefitNodes: "全部節點",
+    benefitDevices: "{0} 台裝置",
+    benefitSupport: "支援：Zalo/email",
     subHint: "管理方案與續訂。以 VietQR 轉帳付款。",
     currentPlan: "目前方案",
     expires: "到期",
@@ -171,6 +180,9 @@ const dictionaries = {
     purchased: "已購買外掛，點擊安裝即可使用。",
   },
   zhCn: {
+    benefitNodes: "全部节点",
+    benefitDevices: "{0} 台设备",
+    benefitSupport: "支持：Zalo/email",
     subHint: "管理方案与续订。通过 VietQR 转账付款。",
     currentPlan: "当前方案",
     expires: "到期",

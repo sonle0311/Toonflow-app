@@ -26,6 +26,11 @@
         <div class="planInfo">
           <el-text tag="strong">{{ planLabel(plan) }}</el-text>
           <el-text size="small" type="info">{{ text("planPeriod", [formatMoney(plan.price), String(plan.periodDays)]) }}</el-text>
+          <ul class="benefits">
+            <li>{{ text("benefitNodes") }}</li>
+            <li>{{ text("benefitDevices", [String(plan.maxDevices)]) }}</li>
+            <li>{{ text("benefitSupport") }}</li>
+          </ul>
         </div>
         <el-button size="small" type="primary" :loading="ordering === plan.code" @click="buy(plan)">
           {{ status?.plan === plan.code ? text("renew") : text("subscribe") }}
@@ -51,7 +56,7 @@ import { IconRefresh } from "@tabler/icons-vue";
 import { formatMoney, marketText } from "@/lib/marketI18n";
 
 type Status = { loggedIn: boolean; email: string; plan: string; planName: string; expiresAt: number };
-type Plan = { code: string; name: string; price: number; periodDays: number };
+type Plan = { code: string; name: string; price: number; periodDays: number; maxDevices: number };
 type Order = { code: string; amount: number; qrUrl: string | null; expiresIn: number };
 
 const text = marketText;
@@ -167,6 +172,8 @@ onBeforeUnmount(() => { if (poller) clearInterval(poller); });
 }
 
 .planInfo { display: flex; flex-direction: column; gap: 4px; }
+
+.benefits { margin: 4px 0 0; padding-left: 18px; color: var(--el-text-color-secondary); font-size: 12px; }
 
 .orderDialog { display: flex; flex-direction: column; gap: 10px; }
 
