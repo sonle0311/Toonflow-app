@@ -139,6 +139,7 @@ declare module 'vue' {
     SmsCodeButton: typeof import('./../components/settings/panels/account/smsCodeButton.vue')['default']
     Store: typeof import('./../components/settings/panels/store/index.vue')['default']
     SubAccounts: typeof import('./../components/settings/panels/account/subAccounts.vue')['default']
+    Subscription: typeof import('./../components/settings/panels/subscription/index.vue')['default']
     TaskRecords: typeof import('./../components/settings/panels/account/taskRecords.vue')['default']
     ToolMessage: typeof import('./../components/agent/toolMessage.vue')['default']
     ToonflowProviderCard: typeof import('./../components/settings/toonflowProviderCard.vue')['default']

@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { importJWK, jwtVerify, type JWK } from "jose";
 import conf from "@/utils/conf";
+import { getLocale } from "@/lib/i18n";
 
 export type MarketSession = {
   userId: string;
@@ -135,7 +136,13 @@ function clearSession() {
 }
 
 async function marketFetch<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  const headers: Record<string, string> = { "content-type": "application/json", "x-device-id": deviceInfo().id, "x-device-name": deviceInfo().name, ...(init.headers as Record<string, string> | undefined) };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "accept-language": getLocale(),
+    "x-device-id": deviceInfo().id,
+    "x-device-name": deviceInfo().name,
+    ...(init.headers as Record<string, string> | undefined),
+  };
   if (init.token) headers.authorization = `Bearer ${init.token}`;
   const response = await fetch(`${marketBaseUrl()}${path}`, { ...init, headers });
   const body = await response.json().catch(() => ({})) as { code?: number; codeName?: string; message?: string; data?: T };

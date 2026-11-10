@@ -59,7 +59,7 @@ import {
   IconDevices,
   IconNetwork,
   IconUserCircle,
-  IconUsersGroup,
+  IconCreditCard,
 } from "@tabler/icons-vue";
 
 const allSettingsPanels = [
@@ -80,7 +80,14 @@ const allSettingsPanels = [
     groupLabel: "市场",
     component: defineAsyncComponent(() => import("./panels/pluginMarket/index.vue")),
   },
-  // ACT: cửa hàng add-on của bản độc lập, luôn hiển thị vì đi qua market service của mình.
+  // ACT: gói dịch vụ + cửa hàng add-on của bản độc lập, luôn hiển thị.
+  {
+    id: "subscription",
+    label: "订阅",
+    icon: IconCreditCard,
+    groupLabel: "市场",
+    component: defineAsyncComponent(() => import("./panels/subscription/index.vue")),
+  },
   {
     id: "store",
     label: "商店",
@@ -101,7 +108,6 @@ const allSettingsPanels = [
     component: defineAsyncComponent(() => import("./panels/personalization/index.vue")),
   },
   { id: "developer", label: "开发者选项", icon: IconCode, component: defineAsyncComponent(() => import("./panels/developer/index.vue")) },
-  { id: "multiTenant", label: "多租户能力", icon: IconUsersGroup, component: defineAsyncComponent(() => import("./panels/multiTenant/developmentNotice.vue")) },
   { id: "about", label: "关于", icon: IconInfoCircle, component: defineAsyncComponent(() => import("./panels/about/index.vue")) },
 ];
 const publicAccountPanel = { ...allSettingsPanels[0]!, get label() { return translate("账号"); } };
