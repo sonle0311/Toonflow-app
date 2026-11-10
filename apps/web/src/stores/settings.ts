@@ -117,7 +117,9 @@ export const toonflowAccountToken = computed(() => {
 export const customProviders = computed<CustomProvider[]>(() => {
   const providers = Array.isArray(settings.value.customProviders) ? [...settings.value.customProviders] : [];
   return providers.filter((item): item is CustomProvider => !!item && typeof item.id === "string" && typeof item.label === "string" && Array.isArray(item.models)
-    && item.models.every((model: CustomProviderModel) => !!model && typeof model.id === "string" && typeof model.label === "string"));
+    && item.models.every((model: CustomProviderModel) => !!model && typeof model.id === "string" && typeof model.label === "string"))
+    // ACT: ẩn placeholder grok2Api do bản cũ tự cài khi chưa có key/model.
+    .filter(item => !(item.id === "grok2Api" && item.models.length === 0 && !item.apiKey));
 });
 
 

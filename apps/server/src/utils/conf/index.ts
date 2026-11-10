@@ -1,7 +1,6 @@
 import conf from "conf";
 import { lstatSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from "@toonflow/file";
 import { resolve } from "node:path";
-import grok2Api from "@toonflow/providers/language/grok2Api";
 import type { RemoteTeam } from "@/utils/teams";
 import type { A2aSettings } from "@/agent/a2a/settings";
 import type { desktopUpdateAttempt } from "@/types/desktop";
@@ -9,7 +8,6 @@ import type { MobileLinkConfig } from "@/utils/mobileLink";
 import { normalizeNodeMenu, serializeNodeMenu } from "@/lib/nodeMenu";
 import type { SavedMcpServer } from "@toonflow/mcp/client";
 
-const autoInstallProviders = [grok2Api];
 const dataDirectory = process.env.TOONFLOW_DATA_DIR ?? resolve(import.meta.dirname, "../../../../../data");
 mkdirSync(dataDirectory, { recursive: true });
 const configDirectory = realpathSync(dataDirectory);
@@ -74,12 +72,6 @@ export function cleanNodeMenuSettings(settings: Record<string, unknown>) {
 
 const settings = config.get("settings", {});
 if (removeLegacySettings(settings)) config.set("settings", settings);
-
-// ACT: Chỉ khởi tạo provider mặc định khi người dùng chưa từng lưu danh sách.
-if (!config.has("settings.customProviders")) {
-  config.set("settings.customProviders", autoInstallProviders.map(({ id, label, icon, version, apiUrl, protocol, models }) =>
-    ({ id, label, icon, version, apiUrl, protocol, models, apiKey: "" })));
-}
 
 if (!config.get("mediaGenerationDisabledOnce", false)) {
   const toolsDirectory = resolve(configDirectory, "tools");
