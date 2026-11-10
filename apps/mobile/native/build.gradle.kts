@@ -21,6 +21,7 @@ android {
   }
 
   signingConfigs {
+    // ACT: keystore debug trong repo chỉ dùng cho build debug.
     create("defaultSigning") {
       storeFile = file("defaultSigning.keystore")
       storePassword = "android"
@@ -28,10 +29,18 @@ android {
       keyPassword = "android"
     }
   }
+  val releaseStoreFile = providers.environmentVariable("SLSTUDIO_RELEASE_STORE_FILE").orNull
+  val releaseSigning = if (releaseStoreFile != null) signingConfigs.create("releaseSigning") {
+    storeFile = file(releaseStoreFile)
+    storePassword = providers.environmentVariable("SLSTUDIO_RELEASE_STORE_PASSWORD").orNull
+    keyAlias = providers.environmentVariable("SLSTUDIO_RELEASE_KEY_ALIAS").orNull
+    keyPassword = providers.environmentVariable("SLSTUDIO_RELEASE_KEY_PASSWORD").orNull
+  } else null
   buildTypes {
     debug { signingConfig = signingConfigs.getByName("defaultSigning") }
     release {
-      signingConfig = signingConfigs.getByName("defaultSigning")
+      // ACT: không bao giờ ký release bằng keystore debug công khai trong Git.
+      signingConfig = releaseSigning ?: throw GradleException("Thiếu SLSTUDIO_RELEASE_STORE_FILE cho build release")
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))

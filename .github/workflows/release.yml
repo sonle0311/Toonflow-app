@@ -120,7 +120,7 @@ jobs:
             "## 🚀 安装说明",
             "",
             "- 💻 **Windows**：双击下载的安装包，按提示完成安装。ARM64 需要 .NET Framework 4.8.1，较新的 Windows 11 已内置。",
-            "- 🍎 **Mac（macOS 14 及以上）**：打开下载的 `.dmg` 镜像，将 `toonflow.app` 拖入“应用程序”，复制完成后再从“应用程序”打开。",
+            "- 🍎 **Mac（macOS 14 及以上）**：打开下载的 `.dmg` 镜像，将应用拖入“应用程序”，复制完成后再从“应用程序”打开。",
             "- 🐧 **Linux（Debian / Ubuntu）**：选择对应架构的 DEB，在下载目录执行 `sudo apt install ./toonflow-版本号-linux-架构.deb`，安装后从应用菜单打开。",
             "- 📱 **Android**：在手机上打开 APK，按系统提示允许此来源安装应用。后续版本可直接覆盖安装。",
             "",

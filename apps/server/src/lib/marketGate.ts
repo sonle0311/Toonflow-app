@@ -17,8 +17,10 @@ const publicPrefixes = [
  */
 export async function marketGate(req: Request, res: Response, next: NextFunction) {
   if (process.env.MARKET_BYPASS === "1") return next();
-  if (!req.path.startsWith("/api/")) return next();
-  if (publicPrefixes.some(prefix => req.path.startsWith(prefix))) return next();
+  // ACT: Express định tuyến không phân biệt hoa/thường; nếu so sánh nguyên bản thì "/API/..." sẽ đi vòng qua gate.
+  const path = req.path.toLowerCase();
+  if (!path.startsWith("/api/")) return next();
+  if (publicPrefixes.some(prefix => path.startsWith(prefix))) return next();
 
   if (!readSession()) {
     res.status(401).json({ code: 401, codeName: "MARKET_UNAUTHENTICATED", message: "Chưa đăng nhập tài khoản" });

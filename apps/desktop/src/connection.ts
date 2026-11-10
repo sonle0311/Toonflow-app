@@ -21,11 +21,8 @@ export default async function createDesktopConnection(app: express.Express, dire
   function requireRemoteConnection() {
     if (localOnly()) throw Object.assign(new Error("多租户主机模式下不能连接其他设备"), { status: 409 });
   }
-  const nativePosts = new Set([
-    "/api/desktop/ready", "/api/desktop/devtools", "/api/desktop/clipboard/read", "/api/desktop/clipboard/write",
-    "/api/desktop/notification",
-    "/api/desktop/selectSaveFile", "/api/desktop/saveFile", "/api/desktop/providerFile/select", "/api/desktop/providerFile/read",
-  ]);
+  // ACT: khi ghép máy từ xa, chỉ cho phép endpoint báo ready; clipboard/file/notification đều là bridge nhạy cảm của máy chủ.
+  const remoteSafePosts = new Set(["/api/desktop/ready"]);
 
   async function start() {
     const connection = await createRemoteConnection(directory, {
@@ -113,10 +110,11 @@ export default async function createDesktopConnection(app: express.Express, dire
       if (!connection.remote) return app(req, res, next);
       // ACT: 远端页面不能把原生握手凭据经代理发送到其他主机。
       if (req.path === "/api/multiTenant/hostSession") return void res.sendStatus(403);
-      if (req.method === "GET" && req.path === "/api/desktop/update" || req.method === "POST" && nativePosts.has(req.path)) {
+      const remotePath = posix.normalize(decodeURIComponent(req.path).replaceAll("\\", "/")).toLowerCase();
+      if (req.method === "GET" && remotePath === "/api/desktop/update" || req.method === "POST" && remoteSafePosts.has(remotePath)) {
         return app(req, res, next);
       }
-      const path = posix.normalize(decodeURIComponent(req.path).replaceAll("\\", "/")).toLowerCase();
+      const path = remotePath;
       if (path === "/api/desktop" || path.startsWith("/api/desktop/")) {
         return void res.status(403).json({ message: translateMessage("请先断开设备连接，再管理本机功能") });
       }

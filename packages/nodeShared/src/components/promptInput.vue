@@ -173,9 +173,9 @@ function normalizeModel(value: AnyTagProps[][]): AnyTagProps[][] {
       const template = document.createElement("template");
       template.innerHTML = tag.html;
       const id = template.content.querySelector<HTMLElement>(".imageReference[data-reference-id]")?.dataset.referenceId;
-      if (!id) return [tag];
-      const reference = props.references.find(item => item.id === id);
-      if (!reference) return [];
+      // ACT: canvas nhập từ ngoài có thể chứa HTML lạ; chỉ dựng lại từ tham chiếu đã xác thực, còn lại đổi thành text.
+      const reference = id ? props.references.find(item => item.id === id) : undefined;
+      if (!reference) return [{ type: "Write", text: template.content.textContent ?? "" }];
       return [{ type: "Custom", html: `<span style="display: inline-block;">${referenceHtml(reference)}</span>` }];
     });
     const next: AnyTagProps[] = [{ type: "Write", text: "" }];

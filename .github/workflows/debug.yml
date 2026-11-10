@@ -316,7 +316,12 @@ jobs:
           await write(join(process.env.inspectionDirectory, "app.tar"), Bun.zstdDecompressSync(await file(join(directory, archives[0])).arrayBuffer()));
           '
           tar -xf "$inspectionDirectory/app.tar" -C "$inspectionDirectory"
-          app="$inspectionDirectory/toonflow.app"
+          inspectedCount=$(find "$inspectionDirectory" -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')
+          if [[ "$inspectedCount" -ne 1 ]]; then
+            echo '::error::更新包必须包含且仅包含一个 .app。'
+            exit 1
+          fi
+          app=$(find "$inspectionDirectory" -maxdepth 1 -name '*.app' -print -quit)
           test -s "$app/Contents/Resources/AppIcon.icns"
           test -s "$app/Contents/Resources/app/bun/index.js"
           test -x "$app/Contents/MacOS/bun"
@@ -333,11 +338,11 @@ jobs:
           hdiutil attach "$dmgPath" -readonly -nobrowse -mountpoint "$mountDirectory"
           trap 'hdiutil detach "$mountDirectory"' EXIT
           mountedApps=("$mountDirectory"/*.app)
-          if [[ ${#mountedApps[@]} -ne 1 || "${mountedApps[0]}" != "$mountDirectory/toonflow.app" ]]; then
-            echo '::error::DMG 必须包含且仅包含一个 toonflow.app。'
+          if [[ ${#mountedApps[@]} -ne 1 ]]; then
+            echo '::error::DMG 必须包含且仅包含一个 .app。'
             exit 1
           fi
-          app="$mountDirectory/toonflow.app"
+          app="${mountedApps[0]}"
           test -s "$app/Contents/Resources/AppIcon.icns"
           test -s "$app/Contents/Resources/app/bun/index.js"
           test -x "$app/Contents/MacOS/bun"
