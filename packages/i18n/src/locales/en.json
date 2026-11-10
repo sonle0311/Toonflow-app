@@ -4063,5 +4063,7 @@
   "提交授权码失败": "Failed to submit the authorization code",
   "确定退出 {0} 登录？相关模型将不可用。": "Sign out of {0}? Its models will no longer be available.",
   "画布1": "Canvas 1",
-  "画布{0}": "Canvas {0}"
+  "画布{0}": "Canvas {0}",
+  "尚未配置文本模型。请先在设置中添加供应商或登录账号。": "No text model configured. Add a provider or sign in from Settings.",
+  "前往设置": "Open settings"
 }

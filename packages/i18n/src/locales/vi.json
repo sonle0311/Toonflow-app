@@ -4102,5 +4102,7 @@
   "提交授权码失败": "Gửi mã cấp quyền thất bại",
   "确定退出 {0} 登录？相关模型将不可用。": "Đăng xuất khỏi {0}? Các model của nhà cung cấp này sẽ không dùng được.",
   "画布1": "Bảng vẽ 1",
-  "画布{0}": "Bảng vẽ {0}"
+  "画布{0}": "Bảng vẽ {0}",
+  "尚未配置文本模型。请先在设置中添加供应商或登录账号。": "Chưa cấu hình model văn bản. Hãy thêm nhà cung cấp hoặc đăng nhập trong Cài đặt.",
+  "前往设置": "Mở cài đặt"
 }

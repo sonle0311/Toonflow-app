@@ -19,7 +19,5 @@ export type ProviderTaskData = Parameters<NonNullable<ProviderContext["saveTaskD
 export type AudioConvertOptions = Parameters<ProviderTools["audio"]["convert"]>[1];
 export type { FfmpegFactory, FfmpegCommand } from "@toonflow/ffmpeg/types";
 
-export { languagePresets, findLanguagePreset, type LanguagePreset, type LanguagePresetModel } from "./src/presets";
-
 export const languageProviders = [deepSeek, grok2ApiLanguage] as const;
 export const mediaProviders = [apiMart, metaso, compshare, grok2ApiMedia, chatgpt2Api, flow2Api] as const;

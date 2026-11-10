@@ -55,6 +55,12 @@
               <h1>今天要做点什么？</h1>
             </div>
             <div class="promptArea">
+              <el-alert v-if="!modelChoices.length" class="modelSetupHint" type="info" :closable="false" show-icon>
+                <template #title>
+                  尚未配置文本模型。请先在设置中添加供应商或登录账号。
+                  <el-button link type="primary" @click="openModelSettings">前往设置</el-button>
+                </template>
+              </el-alert>
               <el-card class="promptCard" :class="{ draggingAttachments }" shadow="never" @dragenter.capture="dragEnterAttachments" @dragover.capture="dragOverAttachments" @dragleave.capture="dragLeaveAttachments" @drop.capture="dropAttachments">
                 <div v-if="draggingAttachments" class="attachmentDropOverlay" role="status" aria-live="polite">
                   <icon-paperclip :size="20" aria-hidden="true" />
@@ -123,6 +129,7 @@
 
 <script setup lang="ts">
 import { locale, translate } from "@toonflow/i18n/vue";
+import { modelChoices } from "@/stores/settings";
 import { appName, repoUrl } from "@/lib/branding";
 import { channelCapabilities } from "@/lib/channel";
 import axios from "axios";
@@ -161,6 +168,11 @@ import homeAdvertisementCarousel from "./homeAdvertisementCarousel.vue";
 
 const settingsVisible = ref(false);
 const settingsDialog = ref<InstanceType<typeof settings>>();
+
+function openModelSettings() {
+  settingsVisible.value = true;
+  settingsDialog.value?.openPanel("languageModel");
+}
 const advertisements = ref<HomeAdvertisements>({ banner: null, banners: [], bannerMode: "carousel", bannerInterval: 5, sidebar: [] });
 const assetsVisible = ref(false);
 const mobileConnectVisible = ref(false);
