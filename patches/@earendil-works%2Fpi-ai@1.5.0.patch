@@ -1,0 +1,32 @@
+diff --git a/dist/auth/oauth/load.js b/dist/auth/oauth/load.js
+index c476bd3b72407899bf8850d4dced0876657649ff..216865208aec71f0f79bc7f4e08d133b030ecdeb 100644
+--- a/dist/auth/oauth/load.js
++++ b/dist/auth/oauth/load.js
+@@ -16,7 +16,26 @@ const importOAuthModule = (specifier) => {
+     const runtimeSpecifier = import.meta.url.endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier;
+     return import(__rewriteRelativeImportExtension(runtimeSpecifier));
+ };
+-let bundledLoaders;
++import { anthropicOAuth } from "./anthropic.js";
++import { openaiCodexOAuth } from "./openai-codex.js";
++import { openaiChatGPTOAuth } from "./openai-chatgpt.js";
++import { githubCopilotOAuth } from "./github-copilot.js";
++import { openRouterOAuth } from "./openrouter.js";
++import { kimiCodingOAuth } from "./kimi-coding.js";
++import { metaOAuth } from "./meta.js";
++import { xaiOAuth } from "./xai.js";
++import { createRadiusOAuth } from "./radius.js";
++let bundledLoaders = {
++    anthropic: () => anthropicOAuth,
++    openaiCodex: () => openaiCodexOAuth,
++    openaiChatGPT: () => openaiChatGPTOAuth,
++    githubCopilot: () => githubCopilotOAuth,
++    openrouter: () => openRouterOAuth,
++    kimiCoding: () => kimiCodingOAuth,
++    meta: () => metaOAuth,
++    xai: () => xaiOAuth,
++    radius: createRadiusOAuth,
++};
+ /** Registers statically bundled OAuth flows for standalone Bun binaries. */
+ export function registerBundledOAuthFlowLoaders(loaders) {
+     bundledLoaders = loaders;

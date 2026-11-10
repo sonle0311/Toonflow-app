@@ -1,9 +1,13 @@
 import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import conf from "@/utils/conf";
 import { t } from "@/lib/i18n";
+
+// ACT: bản build standalone (Electrobun) không theo được import động trong pi; đăng ký flow tĩnh trước khi dùng.
+registerBunOAuthFlows();
 
 export type OAuthProvider = {
   id: string;

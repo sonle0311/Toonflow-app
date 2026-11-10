@@ -950,6 +950,7 @@
   "patchedDependencies": {
     "@vue-flow/core@1.48.2": "patches/vueFlowCore.patch",
     "@earendil-works/pi-coding-agent@1.5.0": "patches/piCodingAgent.patch",
+    "@earendil-works/pi-ai@1.5.0": "patches/@earendil-works%2Fpi-ai@1.5.0.patch",
     "@earendil-works/pi-agent-core@1.5.0": "patches/piAgentCore.patch",
   },
   "packages": {
